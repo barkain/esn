@@ -51,11 +51,12 @@ API keys), `--extra novelty` (learned-embedding `N_sp`). Requires Python ≥ 3.1
 
 ## Quickstart
 
-### Key-free — Claude subscription (recommended)
+### Agentic Mutation
 
-No API key: `make_agent_mutator` + `make_agent_analyzer` authenticate through
-your local Claude install / macOS keychain. Pass a real `analyzer` so novelty
-is active (without one `esn.run` warns and degrades to plain fitness search).
+A multi-turn Claude *agent* proposes each mutation. `make_agent_mutator` +
+`make_agent_analyzer` authenticate through your local Claude install / macOS
+keychain — **no API key**. Pass a real `analyzer` so novelty (`N_sp`) is active
+(without one `esn.run` warns and degrades to plain fitness search).
 
 ```bash
 uv sync --extra agent --extra novelty   # subscription SDK + learned-embedding N_sp
@@ -72,10 +73,11 @@ result = esn.run(MY_DOMAIN, mutator=mutator, analyzer=analyzer, generations=20, 
 print(result.best_score, result.best_code)
 ```
 
-### Alternative — API key (`make_llm_mutator`)
+### Linear Prompt-Response Mutation
 
-Same shape, but billed to a provider key. The provider is chosen by model name
-(`gpt-*` → `OPENAI_API_KEY`, `claude-*` → `ANTHROPIC_API_KEY`):
+One LLM completion proposes each mutation — faster and cheaper, billed to a
+provider API key chosen by model name (`gpt-*` → `OPENAI_API_KEY`, `claude-*` →
+`ANTHROPIC_API_KEY`):
 
 ```bash
 uv sync --extra llm --extra novelty
@@ -88,9 +90,7 @@ analyzer = esn.make_analyzer(model="gpt-4o-mini")
 result = esn.run(MY_DOMAIN, mutator=mutator, analyzer=analyzer, generations=20, seed=42)
 ```
 
-`make_agent_mutator` drives a multi-turn Claude *agent*; `make_llm_mutator` does
-one completion per mutation (cheapest) — see [docs/mutators.md](docs/mutators.md)
-for when to use which.
+See [docs/mutators.md](docs/mutators.md) for when to use which.
 
 ## Credentials / API keys
 
