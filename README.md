@@ -1,5 +1,7 @@
 # ESN - Epistemic-Spectral-Novelty
 
+[![CI](https://github.com/barkain/esn/actions/workflows/ci.yml/badge.svg)](https://github.com/barkain/esn/actions/workflows/ci.yml)
+
 **Spend your LLM budget on candidates that are both *good* and *genuinely new*.**
 
 ---
