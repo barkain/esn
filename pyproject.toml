@@ -1,0 +1,68 @@
+# esn — uv-only project: install with `uv pip install` / `uv add`; never pip.
+# scipy is NOT a library dependency — it is auto-installed into the uv candidate sandbox for solutions that need it.
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "esn"
+version = "0.1.0"
+description = "A general-purpose, novelty-guided program/solution generator: LLM-driven evolutionary search steered by an epistemic spectral-novelty signal."
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "Nadav Barkai" }]
+keywords = [
+    "llm",
+    "evolutionary-search",
+    "code-generation",
+    "novelty-search",
+    "program-synthesis",
+    "optimization",
+    "spectral-novelty",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Code Generators",
+    "Typing :: Typed",
+]
+dependencies = ["pydantic>=2.0.0", "numpy>=1.24.0"]
+
+[project.urls]
+Homepage = "https://github.com/barkain/esn"
+Repository = "https://github.com/barkain/esn"
+Issues = "https://github.com/barkain/esn/issues"
+
+[project.optional-dependencies]
+novelty = ["sentence-transformers>=2.2.0", "chromadb>=0.4.0"]
+llm = ["openai>=1.0.0", "anthropic>=0.40.0"]
+agent = ["claude-agent-sdk>=0.1.0"]
+all = ["esn[novelty,llm,agent]"]
+dev = ["pytest>=7.0.0", "pytest-cov>=4.0.0", "ruff>=0.1.0"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/esn"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "slow: marks tests as slow (deselect with -m 'not slow')",
+]

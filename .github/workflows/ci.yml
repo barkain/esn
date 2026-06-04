@@ -1,0 +1,147 @@
+name: CI
+
+# Offline / mock-based CI for the public ESN library.
+# No API keys are required: the test subset and smoke checks are offline.
+#
+# Tooling contract: uv is used EXCLUSIVELY for environments and installs.
+# No bare pip and no stdlib venv module are used anywhere in this workflow:
+# every environment comes from `uv venv` and every install from `uv pip`.
+# Every job installs uv first via astral-sh/setup-uv.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Lint: ruff check + ruff format --check (single Python is sufficient).
+  # ---------------------------------------------------------------------------
+  lint:
+    name: lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Create virtual environment
+        run: uv venv --python 3.12
+
+      - name: Install ruff
+        run: uv pip install ruff
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: ruff format --check
+        run: uv run ruff format --check .
+
+  # ---------------------------------------------------------------------------
+  # 2. Lean import: install CORE ONLY (no extras) and assert the heavy,
+  #    optional dependencies are never imported at module load time.
+  #    This guards the lean-core contract forever.
+  # ---------------------------------------------------------------------------
+  lean-import:
+    name: lean-import (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Create virtual environment
+        run: uv venv --python ${{ matrix.python-version }}
+
+      - name: Install core only (no extras)
+        run: uv pip install -e .
+
+      - name: Import core modules
+        run: |
+          uv run python -c "import esn.engine; import esn.engine.domain; import esn.engine.mutator; from esn import run, DomainSpec"
+
+      - name: Assert heavy optional deps are NOT imported (lean-core contract)
+        run: |
+          uv run python - <<'PY'
+          import sys
+
+          # Importing the public surface must not drag in any heavy / optional
+          # dependency. Keep this list in sync with the optional extras.
+          import esn.engine
+          import esn.engine.domain
+          import esn.engine.mutator
+          from esn import run, DomainSpec  # noqa: F401
+
+          forbidden = {
+              "torch",
+              "chromadb",
+              "sentence_transformers",
+              "openai",
+              "anthropic",
+              "claude_agent_sdk",
+          }
+          leaked = sorted(forbidden & set(sys.modules))
+          if leaked:
+              raise SystemExit(
+                  "lean-core contract violated: heavy optional deps imported at "
+                  f"core load time: {leaked}"
+              )
+          print("lean-core contract OK: no heavy optional deps imported")
+          PY
+
+  # ---------------------------------------------------------------------------
+  # 3. Test: full install with dev + all extras, then run the offline pytest
+  #    suite. uv is also the candidate-sandbox runtime the compiler tests
+  #    shell out to, so it must be present on PATH (it is, via setup-uv).
+  # ---------------------------------------------------------------------------
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Create virtual environment
+        run: uv venv --python ${{ matrix.python-version }}
+
+      - name: Install with dev + all extras
+        run: uv pip install -e ".[dev,all]"
+
+      - name: Run offline test suite
+        run: uv run pytest -q
