@@ -2,14 +2,14 @@
 # Copyright (c) 2026 The ESN authors.
 """Core data models for ESN framework."""
 
-from enum import StrEnum
+from enum import Enum
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict
 from typing import Literal, Optional
 
 
-class HypothesisStatus(StrEnum):
+class HypothesisStatus(str, Enum):  # `StrEnum` is 3.11+; (str, Enum) is the 3.10-safe equivalent
     """Status of a hypothesis in its lifecycle."""
 
     ACTIVE = "active"
