@@ -119,6 +119,8 @@ def run(
     analyzer: Analyzer | None = None,
     predictor: Predictor | None = None,
     seed: int = 42,
+    enable_recombination: bool = False,
+    spectral_threshold_mode: str = "empirical",
 ) -> RunResult:
     """Run the ESN program-search engine on ``domain`` and return a summary.
 
@@ -148,6 +150,13 @@ def run(
             :func:`make_predictor`) adding a prediction-surprise term to the
             epistemic novelty. Inert unless an ``analyzer`` is also supplied.
         seed: Seed for the engine's RNG (reproducibility).
+        enable_recombination: When True, let the engine recombine
+            high-performing branches (an extra exploration operator). Off by
+            default.
+        spectral_threshold_mode: How the spectral pipeline picks its
+            spike-detection threshold — ``"empirical"`` (shuffle-null, default),
+            ``"mp"`` (Marchenko–Pastur edge), or ``"hybrid"``. Only relevant
+            when an ``analyzer`` activates novelty.
 
     Returns:
         A :class:`RunResult` with ``best_code``, ``best_score``,
@@ -166,7 +175,7 @@ def run(
     novelty_computer = None
     config = None
     if analyzer is not None:
-        knowledge, novelty_computer, config = _build_novelty_stack(seed)
+        knowledge, novelty_computer, config = _build_novelty_stack(seed, spectral_threshold_mode)
     else:
         warnings.warn(
             "esn.run() was called without an `analyzer`, so ESN's "
@@ -191,6 +200,7 @@ def run(
         seed=seed,
         batch_size=batch_size,
         total_generations=generations,
+        enable_recombination=enable_recombination,
     )
 
     logger.info(
@@ -255,7 +265,7 @@ def run(
     )
 
 
-def _build_novelty_stack(seed: int):
+def _build_novelty_stack(seed: int, spectral_threshold_mode: str = "empirical"):
     """Lazily construct (KnowledgeIntegration, NoveltyComputer, ESNConfig).
 
     Returns ``(None, None, None)`` and warns if the ``[novelty]`` extra or its
@@ -276,6 +286,7 @@ def _build_novelty_stack(seed: int):
         return None, None, None
 
     config = ESNConfig()
+    config.spectral_threshold_mode = spectral_threshold_mode
 
     # The embedder is the part that pulls in the heavy optional dependency
     # (sentence-transformers / torch). If it is unavailable, KnowledgeIntegration

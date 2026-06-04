@@ -60,7 +60,9 @@ def test_run_without_analyzer_warns_loudly(spy_engine):
 
 def test_run_with_analyzer_activates_and_forwards(monkeypatch, spy_engine):
     # Stub the stack builder so the test doesn't load the heavy embedder.
-    monkeypatch.setattr(api, "_build_novelty_stack", lambda seed: ("KB", "NC", "CFG"))
+    monkeypatch.setattr(
+        api, "_build_novelty_stack", lambda seed, mode="empirical": ("KB", "NC", "CFG")
+    )
     analyzer = object()
     predictor = object()
     with warnings.catch_warnings():
@@ -76,6 +78,26 @@ def test_run_with_analyzer_activates_and_forwards(monkeypatch, spy_engine):
     assert k["analyzer"] is analyzer
     assert k["predictor"] is predictor
     assert (k["knowledge"], k["novelty_computer"], k["config"]) == ("KB", "NC", "CFG")
+
+
+def test_run_forwards_recombination_and_threshold_mode(monkeypatch, spy_engine):
+    captured = {}
+
+    def fake_stack(seed, spectral_threshold_mode="empirical"):
+        captured["mode"] = spectral_threshold_mode
+        return ("KB", "NC", "CFG")
+
+    monkeypatch.setattr(api, "_build_novelty_stack", fake_stack)
+    api.run(
+        _domain(),
+        generations=1,
+        batch_size=2,
+        analyzer=object(),
+        enable_recombination=True,
+        spectral_threshold_mode="hybrid",
+    )
+    assert spy_engine.last_kwargs["enable_recombination"] is True
+    assert captured["mode"] == "hybrid"
 
 
 def test_use_novelty_kwarg_is_removed(spy_engine):

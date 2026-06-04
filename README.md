@@ -60,17 +60,10 @@ keychain — **no API key**. Pass a real `analyzer` so novelty (`N_sp`) is activ
 
 ```bash
 uv sync --extra agent --extra novelty   # subscription SDK + learned-embedding N_sp
-```
 
-```python
-import esn
-from your_domain import MY_DOMAIN  # a DomainSpec you define (see below)
-
-mutator  = esn.make_agent_mutator(MY_DOMAIN, model="claude-haiku-4-5-20251001")
-analyzer = esn.make_agent_analyzer(model="claude-haiku-4-5-20251001")  # hypotheses → N_sp novelty
-result = esn.run(MY_DOMAIN, mutator=mutator, analyzer=analyzer, generations=20, seed=42)
-
-print(result.best_score, result.best_code)
+uv run python examples/run.py --domain circle_packing \
+    --mutator agent --analyzer agent \
+    --generations 20 --batch-size 2 --seed 42
 ```
 
 ### Linear Prompt-Response Mutation
@@ -82,15 +75,17 @@ provider API key chosen by model name (`gpt-*` → `OPENAI_API_KEY`, `claude-*` 
 ```bash
 uv sync --extra llm --extra novelty
 export OPENAI_API_KEY=...   # or ANTHROPIC_API_KEY=... for a claude-* model
+
+uv run python examples/run.py --domain circle_packing \
+    --mutator llm --analyzer llm \
+    --mutation-model gpt-4o --analysis-model gpt-4o-mini \
+    --generations 20 --batch-size 4 --seed 42 \
+    --spectral-threshold-mode hybrid --enable-recombination
 ```
 
-```python
-mutator  = esn.make_llm_mutator(MY_DOMAIN, model="gpt-4o")
-analyzer = esn.make_analyzer(model="gpt-4o-mini")
-result = esn.run(MY_DOMAIN, mutator=mutator, analyzer=analyzer, generations=20, seed=42)
-```
-
-See [docs/mutators.md](docs/mutators.md) for when to use which.
+`uv run python examples/run.py --help` lists every flag. See
+[docs/mutators.md](docs/mutators.md) for agent-vs-linear, and
+[Use it on your own problem](#use-it-on-your-own-problem) to wire a new task in Python.
 
 ## Credentials / API keys
 
