@@ -370,7 +370,102 @@ so it is a targeted "combine the best of two ideas" move, not a constant cost.
 
 ---
 
-## 7. The sandbox and persistence
+## 7. A worked example: `circle_packing`
+
+To make the mechanism concrete, here are real artifacts from one short run of the
+bundled [`circle_packing`](../examples/circle_packing) domain (pack 26
+non-overlapping circles in a unit square; score = sum of radii) — **6
+generations, batch size 2, seed 42**, driven key-free by Claude Haiku. The seed
+is a 1‑8‑17 concentric-ring layout scoring **1.6602**; after six generations the
+best reaches **1.7435**.
+
+> LLM steps are nondeterministic, so a re-run won't reproduce these exact
+> hypotheses or scores. This capture also ran *without* the `[novelty]` embedder,
+> so `N_sp` reads `0.0` throughout and novelty here is **epistemic-only** (§4) —
+> install `--extra novelty` for the live spectral signal. To run your own:
+>
+> ```bash
+> uv run python examples/run.py --domain circle_packing \
+>     --mutator agent --analyzer agent --generations 6 --batch-size 2 --seed 42
+> ```
+
+### The knowledge bank after the run
+
+The analyzer distilled the six generations into **15 active hypotheses**. Each is
+a short causal claim with a Beta-Bernoulli `confidence` and an observation count
+`n_obs` (§3). A representative slice, highest-confidence first:
+
+| `confidence` | `n_obs` | hypothesis (abridged) |
+|:---:|:---:|---|
+| 0.75 | 2 | Anisotropic ring compression — exploit the square's corners by compressing outer-ring circles toward them (4-fold pattern), reducing required radii. |
+| 0.63 | 4 | Alternative ring partitions (1‑6‑19 or 1‑12‑13) with recalibrated radii beat the 1‑8‑17 topology. |
+| 0.50 | 3 | Concentric-ring topology is a local-maximum trap; multi-start / simulated annealing on positions finds denser packings. |
+| 0.50 | 1 | Boundary-contact maximization — pre-place circles on edges and corners (4-fold symmetry), then pack the interior. |
+| 0.38 | 4 | Non-uniform outer ring (corner clustering / edge-hugging) recovers density lost to symmetric placement. |
+| 0.25 | 2 | Ring–spiral hybrid: outer rings in an Archimedean spiral, the inner circle optimized independently. |
+| 0.17 | 3 | Number-theoretic packing exploiting the factors of 26 (2×13, 1+25) with a distinct strategy per group. |
+
+**This table *is* the memory `N_sp` is measured against** (§3–§4): each row becomes
+a certainty-weighted row of the knowledge matrix. The confidence spread is the
+Beta-Bernoulli update at work — the corner-compression idea was supported by two
+candidates (→ 0.75), while the number-theoretic-factoring idea was mostly refuted
+across three (→ 0.17). Each stored hypothesis also carries an appended
+`[aspects: family=… | operator=… | motifs=… | score=… ]` tag (added before
+embedding) so structurally-distinct ideas stay distinguishable. Separately, over
+this run the `explore` style earned the highest mean epistemic novelty (0.67) of
+the four bandit arms — exactly the signal it is rewarded on in EXPLORE mode (§6).
+
+### A mutation, end to end
+
+The most vivid mutation was an **`explore`** step in generation 1. Its parent was
+the **seed** (the concentric-ring construction, score **1.66**); the child
+abandoned rings entirely for a **golden-angle (Fibonacci) spiral**:
+
+Parent — seed (excerpt):
+
+```python
+# Inner ring: 8 circles at radius 0.25; outer ring: 17 at radius 0.42
+for i in range(8):
+    angle = 2 * np.pi * i / 8
+    centers[1 + i] = [0.5 + 0.25*np.cos(angle), 0.5 + 0.25*np.sin(angle)]
+for i in range(17):
+    angle = 2 * np.pi * i / 17 + np.pi / 17
+    centers[9 + i] = [0.5 + 0.42*np.cos(angle), 0.5 + 0.42*np.sin(angle)]
+```
+
+Child — `explore` (excerpt):
+
+```python
+golden_angle = 2.39996322972865          # ≈ 137.5°, the golden angle
+for i in range(n):
+    theta = i * golden_angle
+    r = 0.42 * np.sqrt(i / (n - 1.0) + 0.05)   # spiral radius grows ∝ √i
+    centers[i] = [0.5 + r*np.cos(theta), 0.5 + r*np.sin(theta)]
+# … then iterative overlap resolution + a radius-growth phase
+```
+
+The engine recorded this candidate as `style=explore`, `family=iterative-nested`,
+`score=1.3407`, `epistemic_novelty=1.0` (it pushed genuinely new structure into
+the memory). Note its score — **1.34, *below* the seed's 1.66**. A greedy
+"keep-the-best" loop would discard it on the spot. ESN does not: as a
+high-novelty success it is admitted to the **novelty-keyed frontier** (§5), and
+in generation 2 it became the parent of a further `explore` that climbed to
+**1.4532** — a whole second lineage that only exists because the below-seed idea
+was kept alive.
+
+Meanwhile fitness crowned a different lineage entirely: a quieter **`refine`**
+step (same generation, same seed parent) kept the ring structure and only
+retuned it — inner radius `0.25 → 0.232`, outer `0.42 → 0.413`, and the
+overlap-resolution loop `5 → 25` iterations with a tighter tolerance. That
+refine→repair→refine chain is what reached the run's best of **1.7435**.
+
+That split is the whole mechanism in one run: **fitness decided the champion (the
+refinement chain), novelty decided what else stayed alive to be explored (the
+spiral) — and a naive loop would have kept only the first.**
+
+---
+
+## 8. The sandbox and persistence
 
 **Why candidates run isolated.** Every candidate is *untrusted LLM-generated
 code*. The default `UvSandboxCompiler` runs each candidate in its own `uv run`
@@ -403,7 +498,7 @@ the bandit, the memory, and the spectral structure all come back warm.
 
 ---
 
-## 8. The protocol seams: how the engine stays domain-agnostic
+## 9. The protocol seams: how the engine stays domain-agnostic
 
 Everything above is held together by a handful of small, swappable seams. The
 formal `Protocol`s — `Mutator`, `ProgramCompiler`, `Predictor`, `Analyzer` (and
@@ -416,7 +511,7 @@ touching the rest:
   mutator. See [mutators.md](mutators.md).
 - **`ProgramCompiler`** — `compile(code, seed) → CompilerResult`. Turns code into
   a runnable artifact under sandboxed, bounded execution. Three bundled
-  implementations (§7).
+  implementations (§8).
 - **`Analyzer`** — turns an evaluated candidate into evidence + new hypotheses,
   feeding the memory that `N_sp` is measured against (§3).
 
