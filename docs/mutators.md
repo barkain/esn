@@ -82,4 +82,6 @@ Passing an analyzer also auto-activates the local embedder; add the
 component: [README → Credentials](../README.md#credentials--api-keys).
 
 See [connecting-a-problem.md](connecting-a-problem.md) for how to build the
-`DomainSpec` these mutators operate on.
+`DomainSpec` these mutators operate on, and
+[how-it-works.md](how-it-works.md) for how the analyzer's hypotheses drive the
+spectral-novelty signal that steers selection.

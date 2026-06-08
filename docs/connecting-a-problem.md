@@ -117,6 +117,9 @@ result = esn.run(domain, analyzer=esn.make_analyzer(model="gpt-4o"))        # ke
 `make_analyzer(model=...)` uses an API key (`--extra llm`). Add `--extra novelty`
 for the full embedding-based `N_sp`. (Full table: [README → Credentials](../README.md#credentials--api-keys).)
 
+For how `N_sp` is actually computed from the hypothesis memory and how it steers
+selection, see **[how-it-works.md](how-it-works.md)**.
+
 ## Passing instance data
 
 `solve()` takes no arguments, so problem data is **baked into two places that must
