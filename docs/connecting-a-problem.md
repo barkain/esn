@@ -104,9 +104,11 @@ For full worked specs, see [`examples/circle_packing`](../examples/circle_packin
 
 ## Enabling novelty (the `N_sp` signal)
 
-ESN steers search with a spectral-novelty signal, `N_sp`. It activates when you
-pass an **analyzer** to `esn.run(...)` — without one, `esn.run` warns loudly that
-novelty is inactive. Pick one line:
+ESN steers search with a spectral-novelty signal, `N_sp`. Passing an **analyzer**
+to `esn.run(...)` activates the novelty machinery (hypotheses + epistemic novelty);
+without one, `esn.run` warns loudly that novelty is inactive. The spectral `N_sp`
+signal additionally needs the `[novelty]` embedder — without it embeddings are
+zero and `N_sp` stays flat (epistemic novelty still works). Pick one line:
 
 ```python
 result = esn.run(domain, analyzer=esn.make_agent_analyzer())                # key-free
@@ -116,6 +118,9 @@ result = esn.run(domain, analyzer=esn.make_analyzer(model="gpt-4o"))        # ke
 `make_agent_analyzer()` is key-free (`uv sync --extra agent`, Claude subscription);
 `make_analyzer(model=...)` uses an API key (`--extra llm`). Add `--extra novelty`
 for the full embedding-based `N_sp`. (Full table: [README → Credentials](../README.md#credentials--api-keys).)
+
+For how `N_sp` is actually computed from the hypothesis memory and how it steers
+selection, see **[how-it-works.md](how-it-works.md)**.
 
 ## Passing instance data
 

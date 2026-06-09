@@ -67,9 +67,10 @@ Proven on `circle_packing` (1.6602 → 1.8003) and `tsp`.
 
 ## Driving novelty: the analyzer
 
-Spectral novelty (`N_sp`) only activates when you pass an `analyzer=` to
-`esn.run` — without it, `esn.run` warns loudly that novelty is inactive. The
-analyzer comes in the same two tiers as the mutator:
+Passing an `analyzer=` to `esn.run` activates the novelty machinery (hypotheses +
+epistemic novelty); without it, `esn.run` warns loudly that novelty is inactive.
+The spectral `N_sp` signal additionally needs the `[novelty]` embedder (below).
+The analyzer comes in the same two tiers as the mutator:
 
 ```python
 analyzer = esn.make_agent_analyzer()            # key-free, Claude subscription, [agent]
@@ -77,9 +78,12 @@ analyzer = esn.make_agent_analyzer()            # key-free, Claude subscription,
 result = esn.run(domain, mutator=mutator, analyzer=analyzer, generations=20)
 ```
 
-Passing an analyzer also auto-activates the local embedder; add the
-`[novelty]` extra (sentence-transformers, no key) for full `N_sp`. Credentials per
+Add the `[novelty]` extra (sentence-transformers, no key) for the learned
+embeddings that give a real `N_sp`; without it, embeddings are zero vectors and
+`N_sp` stays flat (epistemic novelty still works). Credentials per
 component: [README → Credentials](../README.md#credentials--api-keys).
 
 See [connecting-a-problem.md](connecting-a-problem.md) for how to build the
-`DomainSpec` these mutators operate on.
+`DomainSpec` these mutators operate on, and
+[how-it-works.md](how-it-works.md) for how the analyzer's hypotheses drive the
+spectral-novelty signal that steers selection.

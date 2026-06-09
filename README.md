@@ -21,12 +21,25 @@ of the structures it has already learned, runs a spectral analysis over that
 memory, and measures how *structurally unlike* each new candidate is from
 everything understood so far (the spectral-novelty score, `N_sp`).
 
-Selection then uses an **epsilon-band Pareto rule**: among candidates whose
-fitness is within a small band of the current best (`f >= f_max - epsilon`),
-the *most novel* one wins. Candidates have to clear the viability bar to be
-considered at all, but within that bar the search deliberately spends its next
-LLM call on the option that teaches it something new. The result is exploration
-that does not crash fitness and exploitation that does not stagnate.
+`N_sp` then shapes selection on **two fronts that decide what the next LLM call
+explores** — without ever letting novelty override fitness:
+
+- **The champion is chosen by fitness.** The run's best is the highest-scoring
+  *viable* candidate (it must clear a small improvement deadband). Novelty does
+  not tie-break or overrule score here.
+- **Novelty decides what survives to be explored.** Viable-but-not-best
+  candidates that are novel enough are kept in a **frontier archive ranked by
+  novelty**, which (together with branch-aware sampling and the current best)
+  feeds the next generation's parents. So a structurally new idea that scored just
+  below the best is preserved
+  and gets to seed future mutations, instead of being discarded the way a naive
+  loop would.
+
+The result is exploration that does not crash fitness and exploitation that does
+not stagnate. (The design intent is often summarized as an *epsilon-band Pareto*
+rule — "among viable candidates, prefer the most novel"; for exactly how the
+implementation realizes that and where the two diverge, see
+[docs/how-it-works.md](docs/how-it-works.md).)
 
 ---
 
@@ -100,7 +113,11 @@ uv run python examples/run.py --domain circle_packing \
 - **`N_sp` (spectral-novelty score)** — how *structurally unlike* a candidate is from everything learned so far; the signal that steers selection.
 - **Hypothesis** — what the analyzer extracts from each evaluated candidate; the memory `N_sp` is measured against.
 - **Spectral analysis** — the decomposition over that hypothesis memory used to compute `N_sp`.
-- **Epsilon-band Pareto** — among candidates within a small fitness band of the best (`f ≥ f_max − ε`), pick the *most novel* one.
+- **Fitness-gated selection** — the run's best is the highest-scoring *viable* candidate (novelty never overrides score); novelty instead ranks the **frontier archive** and feeds parent selection, deciding which viable-but-not-best ideas survive to be explored next. (Often summarized as an *epsilon-band Pareto* intent — "among viable candidates, prefer the most novel.")
+
+For the full mechanism — the generation loop, the spectral math behind `N_sp`,
+how candidates are selected and archived, and where the implementation diverges
+from the *epsilon-band Pareto* framing — see **[docs/how-it-works.md](docs/how-it-works.md)**.
 
 ---
 
@@ -156,7 +173,8 @@ DomainSpec ─┐
  Compiler ──┤   │   2. compile candidate   (ProgramCompiler)    │
             │   │   3. evaluate → fitness  (DomainSpec.evaluator)│
  Novelty ───┘   │   4. score novelty N_sp  (NoveltyComputer)    │
-                │   5. epsilon-band Pareto select               │
+                │   5. promote best by fitness; rank frontier   │
+                │      by novelty; pick parents branch-aware     │
                 │   6. update memory / archives → loop          │
                 └──────────────────────────────────────────────┘
 ```
