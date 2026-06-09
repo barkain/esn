@@ -174,7 +174,7 @@ DomainSpec ─┐
             │   │   3. evaluate → fitness  (DomainSpec.evaluator)│
  Novelty ───┘   │   4. score novelty N_sp  (NoveltyComputer)    │
                 │   5. promote best by fitness; rank frontier   │
-                │      + parents by novelty                     │
+                │      by novelty; pick parents branch-aware     │
                 │   6. update memory / archives → loop          │
                 └──────────────────────────────────────────────┘
 ```
