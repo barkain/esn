@@ -28,9 +28,10 @@ explores** — without ever letting novelty override fitness:
   *viable* candidate (it must clear a small improvement deadband). Novelty does
   not tie-break or overrule score here.
 - **Novelty decides what survives to be explored.** Viable-but-not-best
-  candidates are kept in a **frontier archive ranked by novelty**, which (together
-  with branch-aware sampling and the current best) feeds the next generation's
-  parents. So a structurally new idea that scored just below the best is preserved
+  candidates that are novel enough are kept in a **frontier archive ranked by
+  novelty**, which (together with branch-aware sampling and the current best)
+  feeds the next generation's parents. So a structurally new idea that scored just
+  below the best is preserved
   and gets to seed future mutations, instead of being discarded the way a naive
   loop would.
 
@@ -112,7 +113,7 @@ uv run python examples/run.py --domain circle_packing \
 - **`N_sp` (spectral-novelty score)** — how *structurally unlike* a candidate is from everything learned so far; the signal that steers selection.
 - **Hypothesis** — what the analyzer extracts from each evaluated candidate; the memory `N_sp` is measured against.
 - **Spectral analysis** — the decomposition over that hypothesis memory used to compute `N_sp`.
-- **Fitness-gated selection** — the run's best is the highest-scoring *viable* candidate (novelty never overrides score); novelty instead ranks the **frontier archive** and the parent pool, deciding which viable-but-not-best ideas survive to be explored next. (Often summarized as an *epsilon-band Pareto* intent — "among viable candidates, prefer the most novel.")
+- **Fitness-gated selection** — the run's best is the highest-scoring *viable* candidate (novelty never overrides score); novelty instead ranks the **frontier archive** and feeds parent selection, deciding which viable-but-not-best ideas survive to be explored next. (Often summarized as an *epsilon-band Pareto* intent — "among viable candidates, prefer the most novel.")
 
 For the full mechanism — the generation loop, the spectral math behind `N_sp`,
 how candidates are selected and archived, and where the implementation diverges

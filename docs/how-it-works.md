@@ -125,7 +125,8 @@ spending more only when the search is demonstrably productive.
 `N_sp` is meaningless without something to be novel *against*. That something is
 the **hypothesis bank** — the persistent memory of what the search has learned.
 
-After a candidate succeeds, the **analyzer** turns it into a small structured
+After a candidate is evaluated (in batched mode, after it succeeds), the
+**analyzer** turns it into a small structured
 record: binary **evidence** about existing hypotheses (`{hypothesis_id,
 evidence∈{0,1}}`) and up to three **new hypotheses** (`{text, concepts}`). Each
 hypothesis ([`HypothesisRecord`](../src/esn/core/spectral_models.py)) carries a
@@ -290,7 +291,7 @@ intuition, this section as the mechanism.
 **Where novelty genuinely bites is everywhere *except* best-promotion.** This is
 the substance of the "good *and* new" claim:
 
-- **Archive routing.** Each successful candidate is routed to an archive. If it
+- **Archive routing.** Each successful candidate is *considered* for archive routing. If it
   scores within an elite band of the *running* best — `best_score·0.005`, and note
   this is the best as of the previous generation, since archiving happens before
   promotion — it joins the **elite archive** (a flat size-50 list, score-evicted).
@@ -316,10 +317,11 @@ structurally different approach, `N_sp≈0.9`), C=`1.50` (`N_sp≈0.4`).
   elite band is `1.80 − 0.009 = 1.791`. **A** (`1.81`) lands in the **elite
   archive**. **B** (`1.79`) falls just outside that band, so it routes to the
   **frontier**, admitted on its high novelty; **C** goes to the frontier too.
-- When parents are picked next round, B's high frontier novelty makes it a prime
-  exploration parent even though it scored *below* the old best — so the
-  structurally new idea survives and propagates, precisely because the frontier
-  is novelty-keyed, while a naive loop would have discarded it.
+- When parents are picked next round, B propagates even though it scored *below*
+  the old best — either as a high-novelty member of the frontier fallback pool, or
+  (more often) because it seeded a distinct branch the branch-aware sampler draws
+  from. Either way the structurally new idea survives, while a naive loop would
+  have discarded it.
 
 (The `N_sp` figures here stand in for the *unified* novelty `N` that the frontier
 actually keys on — `N_sp` blended with epistemic novelty under the spike gate of
