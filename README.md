@@ -145,7 +145,7 @@ See **[docs/mutators.md](docs/mutators.md)** for the comparison and one-liners.
 
 ## Bundled examples
 
-Two complete `DomainSpec` implementations ship in [`examples/`](examples/) as
+Three complete `DomainSpec` implementations ship in [`examples/`](examples/) as
 working references:
 
 - [`examples/circle_packing/`](examples/circle_packing) — pack *n* circles into a
@@ -153,6 +153,12 @@ working references:
   good for seeing exploration vs. exploitation trade-offs.
 - [`examples/tsp/`](examples/tsp) — travelling-salesman tour minimization over the
   bundled instances. A combinatorial domain with a `stdio` program interface.
+- [`examples/local_sqli_lab/`](examples/local_sqli_lab) — applying ESN to
+  **authorized security testing**: evolve a SQL-injection (CWE-89) that extracts a
+  hidden secret from a self-contained, in-process vulnerable SQLite endpoint. The
+  candidate is a pure payload-strategy generator; the evaluator owns all target
+  I/O and scores a **non-gameable** continuous distance-to-exploit ladder up to
+  full blind extraction. Offline and CI-safe — no external target.
 
 Each example is a self-contained template: copy the directory, swap in your
 problem's `description`, `initial_code`, `evaluator`, and constraints, and you

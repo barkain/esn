@@ -39,6 +39,10 @@ def _load_domain(name: str):
         from tsp.domain import create_tsp_domain_spec
 
         return create_tsp_domain_spec()
+    if name == "local_sqli_lab":
+        from local_sqli_lab.domain import create_local_sqli_lab_domain_spec
+
+        return create_local_sqli_lab_domain_spec()
     raise ValueError(f"unknown domain {name!r}")
 
 
@@ -66,7 +70,11 @@ def _parse_args(argv=None) -> argparse.Namespace:
         description="Run a bundled ESN example from the command line.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--domain", choices=["circle_packing", "tsp"], default="circle_packing")
+    p.add_argument(
+        "--domain",
+        choices=["circle_packing", "tsp", "local_sqli_lab"],
+        default="circle_packing",
+    )
     p.add_argument(
         "--mutator",
         choices=["agent", "llm"],

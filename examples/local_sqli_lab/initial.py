@@ -25,7 +25,7 @@ case-folded ``union``/``delay_ms`` filter bypass, the timing channel, and a
 working blind-extraction template is left to the search.
 """
 
-INITIAL_SOLUTION = '''\
+INITIAL_SOLUTION = """\
 # Pure candidate: build a local SQLi probe plan for the in-process lab.
 # No network, filesystem, sleep, or DB access here -- the evaluator runs it all.
 import itertools
@@ -56,4 +56,4 @@ def solve():
         add(attempts, "boolean_%d" % i, boolean_template=template)
 
     return {"target": "local_sqli_lab", "attempts": attempts}
-'''
+"""
