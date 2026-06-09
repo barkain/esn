@@ -465,7 +465,48 @@ spiral) — and a naive loop would have kept only the first.**
 
 ---
 
-## 8. The sandbox and persistence
+## 8. Why it's efficient
+
+The scarce resource in this kind of search is the **LLM call** — each mutation and
+analysis costs latency and money, while compiling and scoring a candidate in a
+`uv` subprocess is cheap by comparison. "Efficient" therefore means reaching a
+good solution in **fewer expensive creative steps**, and every part of the design
+spends *cheap* computation to make each *expensive* call count.
+
+- **It stops paying for the same idea twice.** A greedy loop collapses onto one
+  approach and burns calls re-deriving variations of it. Scoring structural
+  novelty against the memory — and deduping that memory — routes budget away from
+  near-duplicates the model has already produced.
+- **No viable call's output is wasted.** Every success, even one *below* the
+  current best, is kept on the novelty-ranked frontier and can become a parent.
+  In §7 the golden-spiral scored 1.34 — below the 1.66 seed; a greedy loop deletes
+  it and loses the call that made it, whereas ESN turned it into a second lineage
+  that reached 1.45. "Didn't improve" becomes exploration fuel instead of waste.
+- **Each call is better-informed.** Hypotheses distilled from past candidates (§3)
+  feed the next mutation prompt, so the model proposes *conditioned on what the
+  search has already learned* rather than starting cold — raising the hit-rate per
+  call, at no extra LLM cost (the belief updates are arithmetic, §6).
+- **Cheap compute aims the expensive budget.** The spectral analysis, the UCB
+  operator-credit bandit, mode selection, and the adaptive batch controller all
+  run *between* calls. They steer the next call (which parent, which style, explore
+  vs. exploit), stop funding mutation styles that aren't working, conserve batch
+  budget by default, and snap back to a known-good program after repeated failures
+  rather than flailing.
+- **It escapes local optima without crashing fitness.** The viability bar keeps it
+  out of infeasible regions while novelty keeps it off a single peak — the balance
+  that reaches a better optimum in fewer generations than pure exploitation (which
+  gets stuck) or pure exploration (which never converges).
+
+**The trade-off, honestly:** the analyzer (and optional predictor) add LLM calls
+*per candidate*, so ESN spends somewhat more per step than a bare loop. The bet is
+that the extra bookkeeping buys far better targeting — fewer steps to escape traps
+and reach a good answer — and net-saves the expensive budget. It pays off most
+when the search space is wide and greedy loops collapse; on easy or narrow
+problems the overhead may not earn its keep.
+
+---
+
+## 9. The sandbox and persistence
 
 **Why candidates run isolated.** Every candidate is *untrusted LLM-generated
 code*. The default `UvSandboxCompiler` runs each candidate in its own `uv run`
@@ -498,7 +539,7 @@ the bandit, the memory, and the spectral structure all come back warm.
 
 ---
 
-## 9. The protocol seams: how the engine stays domain-agnostic
+## 10. The protocol seams: how the engine stays domain-agnostic
 
 Everything above is held together by a handful of small, swappable seams. The
 formal `Protocol`s — `Mutator`, `ProgramCompiler`, `Predictor`, `Analyzer` (and
@@ -511,7 +552,7 @@ touching the rest:
   mutator. See [mutators.md](mutators.md).
 - **`ProgramCompiler`** — `compile(code, seed) → CompilerResult`. Turns code into
   a runnable artifact under sandboxed, bounded execution. Three bundled
-  implementations (§8).
+  implementations (§9).
 - **`Analyzer`** — turns an evaluated candidate into evidence + new hypotheses,
   feeding the memory that `N_sp` is measured against (§3).
 
