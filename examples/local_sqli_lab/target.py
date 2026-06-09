@@ -65,6 +65,17 @@ class LocalSqliLab:
         "readfile",
         "writefile",
         "vacuum",
+        # Nondeterministic SQL — defence in depth (the evaluator already rejects
+        # these). A random/time-varying oracle would break the deterministic
+        # primary/shadow differential the scorer relies on. Mirrors the
+        # evaluator's NONDETERMINISTIC block.
+        "random",
+        "current_time",
+        "current_date",
+        "julianday",
+        "strftime",
+        "unixepoch",
+        "'now'",
     )
 
     def __init__(self, canary: str) -> None:
