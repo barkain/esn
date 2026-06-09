@@ -56,7 +56,9 @@ biased toward the informative ones.
 
 The engine ([`ESNEngine`](../src/esn/engine/engine.py)) runs one generation at a
 time. With a batch size above 1 it mutates *k* candidates per generation in three
-phases; the single-candidate path mirrors the same steps inline.
+phases; the single-candidate path runs the same steps inline (with minor
+differences — e.g. it also analyzes failed candidates, which the batched path
+skips).
 
 ```
               ┌──────────────────────────────────────────────────────────┐
@@ -236,11 +238,14 @@ signal-quality gate, default 3). The first generations of any run therefore
 select almost purely on fitness and epistemic novelty; spectral steering switches
 on only after the memory has accumulated durable structure. There is also a
 richer **BBP calibration** layer (recovering each spike's true strength and an
-eigenvector-alignment reliability). It leaves the legacy spike count and `V_k`
-width unchanged, but its count of *actionable* spikes is unioned into the
-**effective** spike count that gates the mixing weight — so it can switch
-spectral novelty on earlier than the empirical detector alone would, and it also
-feeds mutation-prompt guidance.
+eigenvector-alignment reliability). It is *additive*: it widens the projection
+subspace `V_k` to include BBP-actionable directions, and it raises the
+**effective** spike count that decides whether `N_sp` is computed at all (so a
+candidate's residual isn't nulled when only BBP sees structure). It does **not**
+change the legacy spike count, and the mixing-weight persistence gate still runs
+on that legacy count — so BBP does not by itself switch the spectral *mixing
+weight* on earlier; it mainly sharpens the projection basis and feeds
+mutation-prompt guidance.
 
 A practical consequence: full `N_sp` wants a real embedder, and there are two
 distinct degraded paths worth knowing:
@@ -285,18 +290,21 @@ intuition, this section as the mechanism.
 **Where novelty genuinely bites is everywhere *except* best-promotion.** This is
 the substance of the "good *and* new" claim:
 
-- **Archive routing.** Each successful candidate goes to one of two archives. If
-  it scores within an elite band of the *running* best — `best_score·0.005`, and
-  note this is the best as of the previous generation, since archiving happens
-  before promotion — it joins the **elite archive** (a flat size-50 list,
-  score-evicted). Otherwise it joins the **frontier archive** (a flat size-100
-  list) *keyed on its unified novelty* — admission requires novelty (or
-  repairability) ≥ 0.1, and eviction drops the least novel. The frontier is
-  literally a novelty-ranked reservoir of viable-but-not-best ideas.
-- **Parent selection.** The next generation's parents are drawn from the best,
-  the top elites, **and** the most novel frontier members, then de-duplicated for
-  diversity. So a candidate that wasn't the best but *was* novel gets to seed
-  future mutations.
+- **Archive routing.** Each successful candidate is routed to an archive. If it
+  scores within an elite band of the *running* best — `best_score·0.005`, and note
+  this is the best as of the previous generation, since archiving happens before
+  promotion — it joins the **elite archive** (a flat size-50 list, score-evicted).
+  Otherwise it is *offered* to the **frontier archive** (a flat size-100 list)
+  *keyed on its unified novelty* — but the frontier keeps it only if its novelty
+  (or repairability) clears ≥ 0.1, and eviction drops the least novel, so a
+  low-novelty non-elite success can be kept nowhere. The frontier is a
+  novelty-ranked reservoir of viable-but-not-best ideas.
+- **Parent selection.** Parents are chosen **branch-aware first**: when there are
+  ≥ 2 live branches the engine samples by role (anchor / continuation / breakout /
+  diversity) and always anchors on the global best; only when branches are too few
+  does it fall back to a portfolio drawn from underdeveloped families, the top
+  elites, and the most novel frontier members. Either way, a candidate that wasn't
+  the best but seeded a distinct, novel branch gets to propagate.
 
 A concrete micro-example. Suppose the current best is `1.80` and this generation
 produces three successes: A=`1.81` (a minor refinement, `N_sp≈0.0`), B=`1.79` (a
@@ -313,6 +321,10 @@ structurally different approach, `N_sp≈0.9`), C=`1.50` (`N_sp≈0.4`).
   structurally new idea survives and propagates, precisely because the frontier
   is novelty-keyed, while a naive loop would have discarded it.
 
+(The `N_sp` figures here stand in for the *unified* novelty `N` that the frontier
+actually keys on — `N_sp` blended with epistemic novelty under the spike gate of
+§4; B and C are admitted on the assumption that blended `N` clears the ≥ 0.1 bar.)
+
 That is the mechanism by which ESN avoids collapse: fitness decides the
 *champion*, but novelty decides what *lives on to be explored*.
 
@@ -325,7 +337,9 @@ to the core "good and new" idea.
 
 **Epistemic novelty `N_ep`.** The other half of the blended novelty. Where `N_sp`
 is geometric, `N_ep` is *belief-revision*: it rewards candidates whose evidence
-moved confident hypotheses (`Σ cᵢ·δᵢ`) plus a small bonus for introducing new
+moved high-confidence hypotheses (`Σ cᵢ·δᵢ`, weighting by raw belief confidence
+`cᵢ` — not the certainty-distance `2·|cᵢ−0.5|` the spectral matrix uses) plus a
+small bonus for introducing new
 hypotheses and for **prediction surprise** — a bit set when the score lands
 outside the predictor's pre-evaluation estimate. Broken candidates have their
 `N_ep` heavily discounted. `N_ep` is min-max normalized to `[0,1]`.
@@ -379,9 +393,13 @@ generations, batch size 2, seed 42**, driven key-free by Claude Haiku. The seed
 is a 1‑8‑17 concentric-ring layout scoring **1.6602**; after six generations the
 best reaches **1.7435**.
 
-> LLM steps are nondeterministic, so a re-run won't reproduce these exact
-> hypotheses or scores. This capture also ran *without* the `[novelty]` embedder,
-> so `N_sp` reads `0.0` throughout and novelty here is **epistemic-only** (§4) —
+> These are an **illustrative capture, not a committed benchmark.** Only the seed
+> score (`1.6602`) is independently reproducible from the repo (it falls straight
+> out of [`examples/circle_packing`](../examples/circle_packing)); the mid-run
+> numbers, hypotheses, and lineage come from one nondeterministic LLM run and a
+> re-run won't reproduce them — they illustrate the mechanism's *behavior*, not a
+> guaranteed result. This capture also ran *without* the `[novelty]` embedder, so
+> `N_sp` reads `0.0` throughout and novelty here is **epistemic-only** (§4) —
 > install `--extra novelty` for the live spectral signal. To run your own:
 >
 > ```bash
@@ -477,11 +495,12 @@ spends *cheap* computation to make each *expensive* call count.
   approach and burns calls re-deriving variations of it. Scoring structural
   novelty against the memory — and deduping that memory — routes budget away from
   near-duplicates the model has already produced.
-- **No viable call's output is wasted.** Every success, even one *below* the
-  current best, is kept on the novelty-ranked frontier and can become a parent.
-  In §7 the golden-spiral scored 1.34 — below the 1.66 seed; a greedy loop deletes
-  it and loses the call that made it, whereas ESN turned it into a second lineage
-  that reached 1.45. "Didn't improve" becomes exploration fuel instead of waste.
+- **No high-novelty viable call's output is wasted.** A success below the current
+  best isn't discarded for *being* below best — if it clears the frontier's novelty
+  bar it's kept on the novelty-ranked frontier and can become a parent. In §7 the
+  golden-spiral scored 1.34 — below the 1.66 seed; a greedy loop deletes it and
+  loses the call that made it, whereas ESN turned it into a second lineage that
+  reached 1.45. "Didn't improve" becomes exploration fuel instead of waste.
 - **Each call is better-informed.** Hypotheses distilled from past candidates (§3)
   feed the next mutation prompt, so the model proposes *conditioned on what the
   search has already learned* rather than starting cold — raising the hit-rate per

@@ -28,11 +28,11 @@ explores** — without ever letting novelty override fitness:
   *viable* candidate (it must clear a small improvement deadband). Novelty does
   not tie-break or overrule score here.
 - **Novelty decides what survives to be explored.** Viable-but-not-best
-  candidates are kept in a **frontier archive ranked by novelty**, and the next
-  generation's parents are drawn from the best, the top elites, *and* the most
-  novel frontier members. So a structurally new idea that scored just below the
-  best is preserved and gets to seed future mutations, instead of being discarded
-  the way a naive loop would.
+  candidates are kept in a **frontier archive ranked by novelty**, which (together
+  with branch-aware sampling and the current best) feeds the next generation's
+  parents. So a structurally new idea that scored just below the best is preserved
+  and gets to seed future mutations, instead of being discarded the way a naive
+  loop would.
 
 The result is exploration that does not crash fitness and exploitation that does
 not stagnate. (The design intent is often summarized as an *epsilon-band Pareto*
