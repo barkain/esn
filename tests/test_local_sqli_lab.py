@@ -175,11 +175,29 @@ def test_scoring_is_deterministic_within_process():
 
 
 def test_canary_literal_in_any_field_is_rejected():
-    # An embedded secret literal is a hard-coded answer wherever it hides — here
-    # in the auxiliary 'charset' field, not the SQL string.
+    # An embedded secret literal is a hard-coded answer wherever it hides — in a
+    # string field, AND in a non-string field that the evaluator later str()-coerces
+    # (e.g. charset as a list), which must not smuggle the literal past the scan.
     template = "' OR substr((select canary from secrets),1,{n})={qprefix}--"
-    result = evaluate(_art([{"payload_template": template, "charset": PRIMARY_CANARY}]))
-    assert result.success is False
+    assert (
+        evaluate(_art([{"payload_template": template, "charset": PRIMARY_CANARY}])).success is False
+    )
+    assert (
+        evaluate(_art([{"payload_template": template, "charset": [PRIMARY_CANARY]}])).success
+        is False
+    )
+
+
+def test_allocation_heavy_sql_is_bounded():
+    # A bulk allocator (zeroblob) executes in few opcodes but can balloon memory;
+    # the target must block it quickly rather than allocate.
+    import time
+
+    from local_sqli_lab.target import LocalSqliLab
+
+    t0 = time.time()
+    r = LocalSqliLab(PRIMARY_CANARY).search_user("' OR length(zeroblob(100000000)) > 0--")
+    assert r.blocked and time.time() - t0 < 1.0
 
 
 def test_sandbox_escape_cannot_read_secret_under_uv_isolation():

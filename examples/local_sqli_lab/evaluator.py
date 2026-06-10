@@ -174,20 +174,21 @@ def _coerce_attempts(artifact: Any) -> tuple[list[dict[str, Any]], list[str]]:
         if not isinstance(value, str) or not value:
             errors.append(f"attempt {i} '{present[0]}' must be a non-empty string")
             continue
-        # Scan EVERY string field of the attempt, not just the SQL field: an
-        # unsafe token or an embedded secret literal is a hard-coded answer
-        # wherever it hides (e.g. in 'charset' or 'name'), so reject it there too.
+        # Scan EVERY field of the attempt, not just the SQL field: an unsafe token
+        # or an embedded secret literal is a hard-coded answer wherever it hides
+        # (e.g. in 'charset' or 'name'). Non-string fields are stringified first,
+        # because the evaluator later coerces them with str() (so a list like
+        # charset=[SECRET] would otherwise smuggle the literal past the scan).
         bad = None
         for key, field in item.items():
-            if not isinstance(field, str):
-                continue
-            if len(field) > MAX_PAYLOAD_LEN:
-                bad = f"attempt {i} field '{key}' too long ({len(field)} > {MAX_PAYLOAD_LEN})"
-            elif any(token in field.lower() for token in DESTRUCTIVE):
+            text = field if isinstance(field, str) else str(field)
+            if len(text) > MAX_PAYLOAD_LEN:
+                bad = f"attempt {i} field '{key}' too long ({len(text)} > {MAX_PAYLOAD_LEN})"
+            elif any(token in text.lower() for token in DESTRUCTIVE):
                 bad = f"attempt {i} field '{key}' contains a blocked destructive token"
-            elif any(token in field.lower() for token in NONDETERMINISTIC):
+            elif any(token in text.lower() for token in NONDETERMINISTIC):
                 bad = f"attempt {i} field '{key}' uses a nondeterministic SQL function"
-            elif _contains_canary_literal(field):
+            elif _contains_canary_literal(text):
                 bad = f"attempt {i} field '{key}' embeds a secret literal (read it, don't hard-code it)"
             if bad:
                 break

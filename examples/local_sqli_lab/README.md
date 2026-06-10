@@ -10,9 +10,18 @@ target, and the example is safe to run in CI.
 - The target is an **in-process, in-memory SQLite** app that lives only inside
   the evaluator. It is intentionally vulnerable, but it cannot reach the network,
   the filesystem, or any external system.
-- Candidate `solve()` is **pure**: it builds a plan of probe *attempts* and does
-  no I/O. The evaluator performs every request, enforces scope and safety, and
-  rejects destructive (`DROP`/`DELETE`/…) and nondeterministic (`random()`/…) SQL.
+- Candidate `solve()` is asked to be **pure** — build a plan of probe *attempts*,
+  do no I/O — and the evaluator performs every request, enforces scope, bounds SQL
+  cost/allocation, and rejects destructive (`DROP`/`DELETE`/…) and nondeterministic
+  (`random()`/…) SQL.
+- **Isolation boundary (what is guaranteed):** the candidate runs in an isolated
+  `uv` **subprocess** (`UvSandboxCompiler`) and returns its artifact as JSON, so it
+  **cannot read the evaluator's per-process secret or otherwise game the score** —
+  that is the security-relevant guarantee, and it is what makes the scoring
+  non-gameable. Like ESN's other `UvSandboxCompiler` examples, the candidate is
+  *not* additionally restricted from filesystem/network I/O **within** that
+  subprocess (the "no I/O" rule is a prompt instruction, not an OS sandbox). If you
+  run fully-untrusted candidates, wrap execution in an OS-level sandbox.
 - For ESN research and CI only. To point a *separate, advanced* variant at a real
   target you are authorized to test, you would keep `solve()` pure and add a
   network adapter behind an explicit authorization gate in the evaluator — that

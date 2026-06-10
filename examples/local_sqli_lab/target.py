@@ -31,6 +31,9 @@ MAX_QUERY_LEN = 240
 _PROGRESS_OPS = 1000
 _PROGRESS_BUDGET = 2000
 
+#: Max length of any string/blob a query may build (memory-DoS guard, 3.11+).
+_MAX_SQLITE_BLOB = 1_000_000
+
 
 @dataclass
 class TargetResponse:
@@ -83,6 +86,10 @@ class LocalSqliLab:
         "strftime",
         "unixepoch",
         "'now'",
+        # Bulk allocators: cheap to write but can balloon memory in a few opcodes
+        # (the progress handler bounds CPU, not allocation). Not needed for the lab.
+        "zeroblob",
+        "printf",
     )
 
     def __init__(self, canary: str) -> None:
@@ -112,6 +119,11 @@ class LocalSqliLab:
             return TargetResponse(403, "toy filter blocked exact token", blocked=True)
 
         conn = self._connect()
+        # Bound the size of any string/blob the query can build (memory-DoS guard).
+        # Connection.setlimit is Python 3.11+; on 3.10 the bulk-allocator token
+        # block above is the backstop.
+        if hasattr(conn, "setlimit"):
+            conn.setlimit(sqlite3.SQLITE_LIMIT_LENGTH, _MAX_SQLITE_BLOB)
         delays: list[float] = []
 
         def delay_ms(ms: float) -> int:
