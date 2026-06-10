@@ -8,15 +8,19 @@ into one :class:`esn.DomainSpec`. It is **self-contained and offline**: the
 evaluator talks only to an in-process SQLite lab, so it runs in CI with no
 network and no external authorized target.
 
-Candidate code runs under :class:`esn.PythonSandboxCompiler` with a small safe
-stdlib allow-list (no I/O, no DB) — the evaluator owns every request — and the
-secret to recover is generated fresh per process inside the evaluator, so it is
-never present in the prompt.
+Candidate code runs under :class:`esn.UvSandboxCompiler`, i.e. in an **isolated
+``uv`` subprocess**, and returns its artifact as JSON. This process boundary is
+load-bearing for the security premise: the secret is generated per process inside
+the *evaluator*, and a subprocess candidate cannot import or read the evaluator's
+memory to recover it. (The in-process :class:`esn.PythonSandboxCompiler` is a
+best-effort sandbox that an adversarial candidate can escape — e.g. via traceback
+frame globals — to read the evaluator's secret directly, which would defeat the
+whole point; so this example deliberately uses the stronger process isolation.)
 """
 
 from __future__ import annotations
 
-from esn import DomainSpec, PythonSandboxCompiler
+from esn import DomainSpec, UvSandboxCompiler
 
 from .evaluator import evaluate_local_sqli_artifact
 from .initial import INITIAL_SOLUTION
@@ -41,12 +45,13 @@ SAFE_PAYLOAD_IMPORTS = frozenset(
 _MAX_CODE_LINES = 240
 
 
-def create_local_sqli_lab_domain_spec(*, timeout_seconds: int = 5) -> DomainSpec:
+def create_local_sqli_lab_domain_spec(*, timeout_seconds: int = 30) -> DomainSpec:
     """Build the local SQLi lab :class:`esn.DomainSpec`.
 
     Args:
-        timeout_seconds: per-candidate sandbox timeout (the candidate is pure
-            payload construction, so this is generous).
+        timeout_seconds: per-candidate sandbox timeout. The candidate is pure
+            payload construction, but it runs in an isolated ``uv`` subprocess, so
+            allow for subprocess spin-up.
     """
     return DomainSpec(
         name="local_sqli_lab",
@@ -61,7 +66,7 @@ def create_local_sqli_lab_domain_spec(*, timeout_seconds: int = 5) -> DomainSpec
             "template."
         ),
         initial_code=INITIAL_SOLUTION,
-        compiler=PythonSandboxCompiler(
+        compiler=UvSandboxCompiler(
             allowed_imports=SAFE_PAYLOAD_IMPORTS,
             max_lines=_MAX_CODE_LINES,
             timeout_seconds=timeout_seconds,

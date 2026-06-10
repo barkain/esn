@@ -169,3 +169,41 @@ def test_scoring_is_deterministic_within_process():
     domain = create_local_sqli_lab_domain_spec()
     artifact = domain.compiler.compile(domain.initial_code).artifact
     assert domain.evaluator(artifact).score == domain.evaluator(artifact).score
+
+
+# --- isolation / defence-in-depth regressions --------------------------------
+
+
+def test_canary_literal_in_any_field_is_rejected():
+    # An embedded secret literal is a hard-coded answer wherever it hides — here
+    # in the auxiliary 'charset' field, not the SQL string.
+    template = "' OR substr((select canary from secrets),1,{n})={qprefix}--"
+    result = evaluate(_art([{"payload_template": template, "charset": PRIMARY_CANARY}]))
+    assert result.success is False
+
+
+def test_sandbox_escape_cannot_read_secret_under_uv_isolation():
+    # A candidate that tries to read the evaluator's per-process secret from
+    # process memory (traceback frame globals) is neutralized by UvSandboxCompiler:
+    # it runs in a separate uv subprocess that cannot import or read the
+    # evaluator's canary, so it can never reach full exfiltration that way.
+    domain = create_local_sqli_lab_domain_spec()
+    escape = (
+        "def solve():\n"
+        "    try:\n"
+        "        1 / 0\n"
+        "    except Exception as e:\n"
+        "        f = e.__traceback__.tb_frame\n"
+        "        b = f.f_back.f_globals['__builtins__']\n"
+        "        ev = b['__import__']('local_sqli_lab.evaluator', fromlist=['PRIMARY_CANARY'])\n"
+        "        canary = ev.PRIMARY_CANARY\n"
+        '    t = "\' OR substr((select canary from secrets),1,{n})={qprefix}--"\n'
+        "    return {'target': 'local_sqli_lab',\n"
+        "            'attempts': [{'payload_template': t, 'charset': canary, 'max_depth': 24}]}\n"
+    )
+    compiled = domain.compiler.compile(escape)
+    if compiled.success:
+        # If it somehow ran, it could not have read the real secret -> not full.
+        assert domain.evaluator(compiled.artifact).score < 1000.0
+    else:
+        assert compiled.errors  # rejected at compile time (the expected outcome)

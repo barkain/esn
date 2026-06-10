@@ -24,6 +24,13 @@ from dataclasses import dataclass, field
 #: Inputs longer than this are rejected outright (a crude size guard).
 MAX_QUERY_LEN = 240
 
+#: SQLite progress-handler budget: the handler fires every ``_PROGRESS_OPS``
+#: virtual-machine steps and aborts the statement once it has fired
+#: ``_PROGRESS_BUDGET`` times. ~2M opcodes is far more than any legitimate lab
+#: query needs but trips quickly on a runaway recursive CTE.
+_PROGRESS_OPS = 1000
+_PROGRESS_BUDGET = 2000
+
 
 @dataclass
 class TargetResponse:
@@ -115,6 +122,18 @@ class LocalSqliLab:
 
         conn.create_function("delay_ms", 1, delay_ms)
 
+        # Opcode budget: abort statements that run too long so a pathological
+        # payload (e.g. a recursive CTE) cannot burn evaluator CPU. The handler
+        # fires every _PROGRESS_OPS virtual-machine steps; returning non-zero
+        # interrupts the query (raising an sqlite3 error we report as a 500).
+        steps = [0]
+
+        def _progress() -> int:
+            steps[0] += 1
+            return 1 if steps[0] > _PROGRESS_BUDGET else 0
+
+        conn.set_progress_handler(_progress, _PROGRESS_OPS)
+
         # The vulnerability: q is interpolated directly into the SQL string.
         sql = f"SELECT id, username FROM users WHERE active = 1 AND username = '{q}'"
         try:
@@ -127,6 +146,7 @@ class LocalSqliLab:
                 simulated_latency_ms=5.0 + sum(delays),
             )
         finally:
+            conn.set_progress_handler(None, 0)
             conn.close()
 
         body = "\n".join(f"{row_id}:{name}" for row_id, name in rows)
