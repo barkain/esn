@@ -90,7 +90,7 @@ def fig_frontier_survival(on):
             f"frontier keeps it; it becomes the parent of\n"
             f"the run's best ({best_c['score']:.2f}).",
             xy=(par["gen"], par["score"]),
-            xytext=(2.6, min(by) + (max(by) - min(by)) * 0.30),
+            xytext=(4.8, 0.42),
             fontsize=8.6,
             color="#10558a",
             arrowprops=dict(arrowstyle="->", color="#1f77b4", lw=1.1),
