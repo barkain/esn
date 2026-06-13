@@ -260,6 +260,14 @@ distinct degraded paths worth knowing:
   the spectral signal disappears. Search runs on **fitness + epistemic novelty**.
   This is a separate warning.
 
+![Spectral spikes accumulate over the run; the spectral mixing weight γ stays at zero until spikes persist for ≥3 consecutive generations, then rises.](assets/spectral-gate-circle-packing.png)
+
+*One real `circle_packing` run with the `[novelty]` embedder (seed 42). The
+spectral mixing weight γ holds at zero through the early generations even as
+spikes appear and disappear — it only lifts off once spikes have **persisted**
+long enough to clear the signal-quality gate. Spectral steering is conservative
+by construction. Reproduce: [`docs/assets/`](../docs/assets).*
+
 ---
 
 ## 5. Selection: the viability bar, and where novelty actually bites
@@ -326,6 +334,29 @@ structurally different approach, `N_sp≈0.9`), C=`1.50` (`N_sp≈0.4`).
 (The `N_sp` figures here stand in for the *unified* novelty `N` that the frontier
 actually keys on — `N_sp` blended with epistemic novelty under the spike gate of
 §4; B and C are admitted on the assumption that blended `N` clears the ≥ 0.1 bar.)
+
+This is not just a constructed example — it happens in real runs. Below is one
+real `circle_packing` run (Claude Haiku, seed 42), every candidate plotted by the
+generation it was produced and its score, colored by where it routed:
+
+![Every candidate by generation and score, colored by archive route; the run's best descends from a below-best frontier survivor.](assets/frontier-survival-circle-packing.png)
+
+The run's best (2.06) is the child of a candidate that scored **1.75 — below the
+running best of 1.85 at the time** — and so could never have been the champion. It
+survived only because the novelty frontier kept it as a viable alternative; a
+greedy keep-the-best loop discards it and never reaches the breakthrough. That is
+the mechanism of §5 paying off on a real trace.
+
+The same effect is visible when you run the search with novelty on versus a
+fitness-only control — same domain, seed, mutator, and budget:
+
+![Novelty-on vs fitness-only control: the control plateaus while novelty-on keeps a non-empty frontier and breaks through.](assets/novelty-on-vs-control-circle-packing.png)
+
+This is a single illustrative paired trace, **not a benchmark** (one seed, and the
+novelty-on run also spends extra analyzer calls). But it shows the qualitative
+shape the design predicts: the fitness-only control leads early, then plateaus with
+an empty frontier; novelty-on keeps a reservoir of viable alternatives and breaks
+out of the plateau later in the run. Reproduce both: [`docs/assets/`](../docs/assets).
 
 That is the mechanism by which ESN avoids collapse: fitness decides the
 *champion*, but novelty decides what *lives on to be explored*.
