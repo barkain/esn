@@ -149,48 +149,8 @@ def fig_spectral_gate(on):
     print("wrote spectral-gate-circle-packing.png")
 
 
-def fig_comparison(on, off):
-    if off is None:
-        print("(no off-run; skipping comparison)")
-        return
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(9, 5.6), sharex=True)
-    for run, color, lab in (
-        (on, "#1f77b4", "novelty-on"),
-        (off, "#999999", "fitness-only control"),
-    ):
-        g = run["generations"]
-        ax1.plot(
-            [r["gen"] for r in g],
-            [r["best"] for r in g],
-            color=color,
-            lw=2.2,
-            marker="o",
-            ms=3,
-            label=lab,
-        )
-        ax2.plot(
-            [r["gen"] for r in g], [r["frontier"] for r in g], color=color, lw=2, marker="o", ms=3
-        )
-    ax1.set_ylabel("running best")
-    ax1.legend(loc="lower right", fontsize=9)
-    ax1.set_title(
-        "Novelty-on vs fitness-only control — same domain, seed, mutator, budget\n"
-        "circle_packing · single illustrative paired trace (not a benchmark; "
-        "novelty-on also makes analyzer calls)",
-        fontsize=10,
-    )
-    ax1.grid(True, alpha=0.25)
-    ax2.set_ylabel("frontier size\n(viable alternatives kept)")
-    ax2.set_xlabel("generation")
-    ax2.grid(True, alpha=0.25)
-    fig.tight_layout()
-    fig.savefig(HERE / "novelty-on-vs-control-circle-packing.png", dpi=150)
-    print("wrote novelty-on-vs-control-circle-packing.png")
-
-
 if __name__ == "__main__":
-    on, off = _load("on"), _load("off")
+    on = _load("on")
     assert on is not None, "missing data/run_on.json"
     fig_frontier_survival(on)
     fig_spectral_gate(on)
-    fig_comparison(on, off)

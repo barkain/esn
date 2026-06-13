@@ -1,13 +1,15 @@
-# Value figures
+# Mechanism figures
 
-Three figures depicting what the ESN search actually does, rendered from **real
-`circle_packing` run data** (Claude Haiku, seed 42) — not mock-ups.
+Two figures illustrating *how* the ESN search routes candidates, rendered from
+**real `circle_packing` run data** (Claude Haiku, seed 42) — not mock-ups. These
+depict **mechanism**, not performance: controlled multi-seed comparisons did not
+show a novelty advantage on this benchmark, so nothing here is a "novelty wins"
+claim.
 
 | Figure | Shows |
 | --- | --- |
-| `frontier-survival-circle-packing.png` | Every candidate by generation/score, colored by archive route. The run's best (2.06) descends from a **below-best** (1.75) frontier survivor a greedy loop would discard. |
+| `frontier-survival-circle-packing.png` | Every candidate by generation/score, colored by archive route. On this run the best (2.06) is the child of a **below-best** (1.75) candidate the novelty frontier kept alive — an illustration of the routing rule, not a performance result. |
 | `spectral-gate-circle-packing.png` | The spectral mixing weight γ stays at zero until spikes persist ≥ 3 generations — spectral steering is conservative by construction. |
-| `novelty-on-vs-control-circle-packing.png` | Novelty-on vs a fitness-only control (same domain, seed, mutator, budget). A single illustrative paired trace, **not a benchmark**. |
 
 ## Reproduce
 

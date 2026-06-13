@@ -41,13 +41,16 @@ rule — "among viable candidates, prefer the most novel"; for exactly how the
 implementation realizes that and where the two diverge, see
 [docs/how-it-works.md](docs/how-it-works.md).)
 
-![ESN keeps viable-but-below-best candidates on a novelty-ranked frontier; the run's best descends from one a greedy loop would have discarded.](docs/assets/frontier-survival-circle-packing.png)
+![ESN keeps viable-but-below-best candidates on a novelty-ranked frontier; on this run the best is the child of a below-best frontier survivor.](docs/assets/frontier-survival-circle-packing.png)
 
-*One real `circle_packing` run (Claude Haiku, seed 42). Fitness crowns the
-champion — but the run's best (2.06) descended from a **below-best** candidate
-(1.75) that only survived because the novelty frontier kept it; a greedy
-keep-the-best loop discards it and never finds the breakthrough. More figures and
-the reproducible scripts/data: [`docs/assets/`](docs/assets).*
+*How routing works, on one real `circle_packing` run (Claude Haiku, seed 42):
+fitness crowns the champion, while the novelty frontier keeps viable-but-below-best
+candidates alive — here the run's best (2.06) happened to descend from a
+**below-best** candidate (1.75) the frontier preserved. This is a single-run
+illustration of the **mechanism**, not a performance claim: in controlled
+multi-seed tests, novelty-guided vs fitness-only search were statistically
+indistinguishable on this benchmark. Reproducible scripts/data:
+[`docs/assets/`](docs/assets).*
 
 ---
 
