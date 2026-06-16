@@ -118,6 +118,7 @@ def run(
     mutator: Mutator | None = None,
     analyzer: Analyzer | None = None,
     predictor: Predictor | None = None,
+    tuner: Any | None = None,
     seed: int = 42,
     enable_recombination: bool = False,
     spectral_threshold_mode: str = "empirical",
@@ -201,6 +202,7 @@ def run(
         batch_size=batch_size,
         total_generations=generations,
         enable_recombination=enable_recombination,
+        tuner=tuner,
     )
 
     logger.info(
@@ -322,7 +324,13 @@ _OPENAI_PREFIXES = ("gpt-", "o1", "o3", "o4")
 _ANTHROPIC_PREFIXES = ("claude-",)
 
 
-def make_llm_mutator(domain: DomainSpec, *, model: str) -> Any:
+def make_llm_mutator(
+    domain: DomainSpec,
+    *,
+    model: str,
+    mutator_policy: str = "single_shot",
+    max_tokens: int | None = None,
+) -> Any:
     """Build an :class:`~esn.engine.mutator.LLMMutator` backed by a real provider.
 
     The provider is chosen from ``model``'s prefix: ``gpt-*`` / ``o*`` ->
@@ -332,6 +340,11 @@ def make_llm_mutator(domain: DomainSpec, *, model: str) -> Any:
     Args:
         domain: The :class:`~esn.engine.domain.DomainSpec` the mutator targets.
         model: Provider model name (e.g. ``"gpt-4o"``, ``"claude-sonnet-4-..."``).
+        mutator_policy: ``"single_shot"`` (full-rewrite, default), ``"diff"``
+            (SEARCH/REPLACE edit blocks applied to the parent), or ``"agentic_v1"``.
+        max_tokens: Max completion tokens per call. Default (None) keeps the
+            adapter default (1024), which truncates large programs — raise it for
+            domains whose programs are long.
 
     Returns:
         An :class:`~esn.engine.mutator.LLMMutator` ready to pass to :func:`run`.
@@ -342,20 +355,20 @@ def make_llm_mutator(domain: DomainSpec, *, model: str) -> Any:
     """
     from esn.engine.mutator import LLMMutator
 
-    llm_client = _build_llm_client(model)
-    return LLMMutator(llm_client, domain)
+    llm_client = _build_llm_client(model, max_tokens=max_tokens)
+    return LLMMutator(llm_client, domain, mutator_policy=mutator_policy)
 
 
-def _build_llm_client(model: str):
+def _build_llm_client(model: str, max_tokens: int | None = None):
     """Build a clean ``(system_prompt, user_prompt) -> str`` LLM callable.
 
     Reuses the adapters in :mod:`esn.core.llm_adapters` so the callable contract
     matches what :class:`~esn.engine.mutator.LLMMutator` expects.
     """
     if model.startswith(_OPENAI_PREFIXES):
-        return _build_openai_client(model)
+        return _build_openai_client(model, max_tokens=max_tokens)
     if model.startswith(_ANTHROPIC_PREFIXES):
-        return _build_anthropic_client(model)
+        return _build_anthropic_client(model, max_tokens=max_tokens)
     raise ValueError(
         f"Cannot infer a provider for model {model!r}. Expected a name "
         f"starting with one of {_OPENAI_PREFIXES} (OpenAI) or "
@@ -363,7 +376,7 @@ def _build_llm_client(model: str):
     )
 
 
-def _build_openai_client(model: str):
+def _build_openai_client(model: str, max_tokens: int | None = None):
     import os
 
     try:
@@ -378,10 +391,11 @@ def _build_openai_client(model: str):
 
     api_key = os.environ.get("OPENAI_API_KEY")
     client = openai.OpenAI(api_key=api_key)
-    return OpenAIAdapter(client, model)
+    kwargs = {"max_tokens": max_tokens} if max_tokens is not None else {}
+    return OpenAIAdapter(client, model, **kwargs)
 
 
-def _build_anthropic_client(model: str):
+def _build_anthropic_client(model: str, max_tokens: int | None = None):
     try:
         import anthropic
     except ImportError as exc:
@@ -394,7 +408,8 @@ def _build_anthropic_client(model: str):
     from esn.core.llm_adapters import AnthropicAdapter
 
     client = anthropic.Anthropic()
-    return AnthropicAdapter(client, model)
+    kwargs = {"max_tokens": max_tokens} if max_tokens is not None else {}
+    return AnthropicAdapter(client, model, **kwargs)
 
 
 # ---------------------------------------------------------------------------

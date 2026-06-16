@@ -59,6 +59,13 @@ class MutationContext(BaseModel):
     family_failure_reasons: dict[str, list[str]] = Field(default_factory=dict)
     # family -> list of recent failure reasons
 
+    # Divergence: short descriptions of structures already tried, that a
+    # "diverge" mutation must NOT reproduce (used only by the diverge style).
+    forbidden_structures: list[str] = Field(default_factory=list)
+    # Control-flow fingerprints (cfhash) of those structures, for the mutator's
+    # structural acceptance gate: a diverge output matching one is rejected+retried.
+    forbidden_cfhashes: list[str] = Field(default_factory=list)
+
 
 class MutationResult(BaseModel):
     """Output from the mutator."""
