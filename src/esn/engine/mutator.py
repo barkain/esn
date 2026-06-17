@@ -269,7 +269,9 @@ class LLMMutator:
         preserves the working parts of a parent and lets a lineage *accumulate*
         structure incrementally (e.g. add a missing constraint in one edit)."""
         if not parents:
-            return MutationResult(code="", success=False, errors=["diff mutation requires a parent"])
+            return MutationResult(
+                code="", success=False, errors=["diff mutation requires a parent"]
+            )
         parent_code = parents[0].code
         last_error = ""
         try:
@@ -386,7 +388,9 @@ class LLMMutator:
         for i in range(len(code_lines) - len(search_lines) + 1):
             window = [ln.rstrip() for ln in code_lines[i : i + len(search_lines)]]
             if window == search_lines:
-                new_lines = code_lines[:i] + replace.splitlines() + code_lines[i + len(search_lines) :]
+                new_lines = (
+                    code_lines[:i] + replace.splitlines() + code_lines[i + len(search_lines) :]
+                )
                 return "\n".join(new_lines)
         return None
 
