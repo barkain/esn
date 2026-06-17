@@ -181,23 +181,26 @@ class TestAnalyzerIntegration:
         assert knowledge.apply_call_count == 1
 
 
-class MockLocalImprover:
-    """Local improver that returns a fixed code with a higher score."""
+class MockTuner:
+    """Tuner that returns a fixed code with a higher score (drop-in hook test)."""
 
     def __init__(self, improved_code: str, improved_score: float):
         self._code = improved_code
         self._score = improved_score
         self.call_count = 0
 
-    def improve(self, code, artifact, score, evaluator):
-        from esn.engine.local_improver import LocalImprovementResult
+    def tune(self, *, code, score, compile, evaluator, seed=42):
+        from esn.engine.tuner import TuningResult
 
         self.call_count += 1
-        return LocalImprovementResult(
+        cr = compile(self._code)
+        artifact = cr.artifact if getattr(cr, "success", False) else None
+        return TuningResult(
             improved=True,
             code=self._code,
-            artifact=None,
+            artifact=artifact,
             score=self._score,
+            evals_used=1,
         )
 
 
@@ -291,15 +294,15 @@ class TestPolishShearFamilyReclassification:
         assert extract_ast_features(post_polish)["family"] == "iterative-flat"
 
         # MockMutator returns the same straight-line code as INITIAL_CODE.
-        # MockLocalImprover rewrites it to the iterative-flat code with
-        # a higher score. If the fix works, the candidate's family should
-        # be "iterative-flat" (post-polish), not "straight-line" (pre-polish).
+        # MockTuner rewrites it to the iterative-flat code with a higher score.
+        # If the fix works, the candidate's family should be "iterative-flat"
+        # (post-tune), not "straight-line" (pre-tune).
         mutator = MockMutator(pre_polish)
-        improver = MockLocalImprover(improved_code=post_polish, improved_score=99.0)
+        improver = MockTuner(improved_code=post_polish, improved_score=99.0)
         engine = ESNEngine(
             domain=_make_domain(),
             mutator=mutator,
-            local_improver=improver,
+            tuner=improver,
         )
         record = engine.run_generation()
         assert record.success is True

@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from json import JSONDecodeError
 from typing import Any, Protocol
 
 from esn.core.llm_adapters import LLMAPIError
+from esn.engine.ast_features import extract_ast_features
 from esn.engine.compiler import validate_program_ast
 from esn.engine.domain import DomainSpec
 from esn.engine.models import MutationContext, MutationResult
@@ -52,6 +54,16 @@ _STYLE_INSTRUCTIONS = {
         "Never use pure random search or any approach that hopes to stumble "
         "onto validity. Validity first, quality second."
     ),
+    "diverge": (
+        "The search has STALLED: every recent solution shares the same "
+        "structural approach and the score has plateaued. Do NOT refine, tune, "
+        "or tweak that approach. Invent a CATEGORICALLY DIFFERENT algorithm from "
+        "scratch — a different data layout, a different construction principle, a "
+        "different optimization method. You are deliberately NOT given the current "
+        "program; start fresh from the problem description and required interface. "
+        "Your solution MUST be valid AND MUST NOT be a variant of any approach "
+        "listed as already tried."
+    ),
     "synthesize": "Combine the strongest ideas from the provided parent programs into one coherent solver.",
     "recombine": (
         "You are given two parent programs from different search branches. "
@@ -67,7 +79,13 @@ _STYLE_INSTRUCTIONS = {
 }
 
 
-_VALID_POLICIES = ("single_shot", "agentic_v1")
+_VALID_POLICIES = ("single_shot", "agentic_v1", "diff")
+
+# Matches Aider/AlphaEvolve-style SEARCH/REPLACE edit blocks.
+_SEARCH_REPLACE_RE = re.compile(
+    r"<{5,}\s*SEARCH\s*\n(.*?)\n?={5,}\s*\n(.*?)\n?>{5,}\s*REPLACE",
+    re.DOTALL,
+)
 
 
 _UNICODE_REPLACEMENTS = {
@@ -137,6 +155,15 @@ class LLMMutator:
             )
         self._policy = mutator_policy
 
+    @property
+    def supports_parentless_diverge(self) -> bool:
+        """Whether this mutator can generate a 'diverge' candidate with no parent.
+
+        Only the single-shot policy builds a full program from scratch; the
+        agentic and diff policies require a parent to edit/extend.
+        """
+        return self._policy == "single_shot"
+
     # Maximum number of mutator attempts per candidate. With reasoning models
     # like o3, the LLM occasionally returns empty / truncated code when the
     # reasoning-token budget is exhausted, so we retry with explicit feedback.
@@ -153,6 +180,8 @@ class LLMMutator:
             return self._mutate_single_shot(parents, style, context)
         if self._policy == "agentic_v1":
             return self._mutate_agentic_v1(parents, style, context)
+        if self._policy == "diff":
+            return self._mutate_diff(parents, style, context)
         # unreachable — __init__ validates
         raise ValueError(f"Unknown mutator_policy={self._policy!r}")
 
@@ -197,6 +226,19 @@ class LLMMutator:
                     last_code = code
                     last_metadata = metadata
                     continue
+                # Divergence acceptance gate: a 'diverge' output that reproduces a
+                # known control-flow structure is rejected and retried — enforcement,
+                # not just a prompt request (weak models ignore the latter).
+                if style == "diverge" and context.forbidden_cfhashes:
+                    cf = extract_ast_features(code).get("cfhash", "")
+                    if cf and cf in context.forbidden_cfhashes:
+                        last_error = (
+                            "produced a previously-tried structure (same control-flow "
+                            "shape). Use a categorically DIFFERENT algorithmic structure."
+                        )
+                        last_code = code
+                        last_metadata = metadata
+                        continue
                 metadata.setdefault("style", style)
                 metadata.setdefault("targeted_hypotheses", context.targeted_hypothesis_ids)
                 metadata.setdefault("intended_effect", context.intended_effect)
@@ -215,6 +257,180 @@ class LLMMutator:
             raise  # Fatal API errors must propagate — do not swallow
         except Exception as exc:
             return MutationResult(code="", success=False, errors=[str(exc)])
+
+    def _mutate_diff(
+        self,
+        parents: list[ProgramObject],
+        style: str,
+        context: MutationContext,
+    ) -> MutationResult:
+        """Diff-based mutation: the LLM emits SEARCH/REPLACE edit blocks that are
+        applied to the parent, instead of regenerating the whole program. This
+        preserves the working parts of a parent and lets a lineage *accumulate*
+        structure incrementally (e.g. add a missing constraint in one edit)."""
+        if not parents:
+            return MutationResult(code="", success=False, errors=["diff mutation requires a parent"])
+        parent_code = parents[0].code
+        last_error = ""
+        try:
+            system_prompt = self._build_diff_system_prompt(style)
+            base_user_prompt = self._build_diff_user_prompt(parents, style, context)
+            for attempt in range(self._MAX_ATTEMPTS):
+                user_prompt = base_user_prompt
+                if attempt > 0 and last_error:
+                    user_prompt = (
+                        f"{base_user_prompt}\n\nPREVIOUS ATTEMPT FAILED: {last_error}\n"
+                        "Output ONLY valid SEARCH/REPLACE blocks whose SEARCH text "
+                        "appears VERBATIM in the current program."
+                    )
+                response = self._llm(system_prompt, user_prompt)
+                try:
+                    new_code, n_blocks, full_rewrite = self._apply_search_replace(
+                        parent_code, response
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    last_error = str(exc)
+                    continue
+                if not new_code or n_blocks == 0:
+                    last_error = "no applicable SEARCH/REPLACE blocks found in response"
+                    continue
+                new_code = self._sanitize_code(new_code)
+                errors = validate_program_ast(
+                    new_code,
+                    max_lines=self._domain.max_code_lines,
+                    allowed_imports=self._domain.allowed_imports,
+                )
+                if errors:
+                    last_error = "; ".join(errors)
+                    continue
+                # Validity instrumentation: prove this was a real *incremental*
+                # edit, not the empty-SEARCH escape hatch silently regenerating
+                # the whole program (which would make "diff" secretly full-rewrite).
+                changed = self._changed_line_fraction(parent_code, new_code)
+                metadata = {
+                    "style": style,
+                    "mutation_format": "diff",
+                    "diff_blocks": n_blocks,
+                    "diff_full_rewrite": bool(full_rewrite),
+                    "diff_changed_frac": round(changed, 4),
+                    "mutator_attempts": attempt + 1,
+                    "parent_count": len(parents),
+                    "targeted_hypotheses": context.targeted_hypothesis_ids,
+                    "intended_effect": context.intended_effect,
+                }
+                return MutationResult(code=new_code, success=True, metadata=metadata)
+            return MutationResult(
+                code=parent_code,
+                success=False,
+                errors=[last_error or "diff mutator failed after retries"],
+                metadata={"mutation_format": "diff"},
+            )
+        except LLMAPIError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            return MutationResult(code="", success=False, errors=[str(exc)])
+
+    def _apply_search_replace(self, parent_code: str, response: str) -> tuple[str, int, bool]:
+        """Apply SEARCH/REPLACE blocks from *response* to *parent_code*.
+
+        Returns ``(new_code, n_blocks_applied, full_rewrite)``. Raises if a
+        SEARCH block does not match. An empty SEARCH block means "replace the
+        whole program" (a full rewrite), which keeps the path robust when the
+        model declines a targeted edit — ``full_rewrite`` flags that so callers
+        can measure how often diff silently degrades to regeneration."""
+        blocks = _SEARCH_REPLACE_RE.findall(response)
+        if not blocks:
+            return parent_code, 0, False
+        code = parent_code
+        applied = 0
+        full_rewrite = False
+        for search, replace in blocks:
+            if search.strip() == "":
+                code = replace
+                applied += 1
+                full_rewrite = True
+                continue
+            if search in code:
+                code = code.replace(search, replace, 1)
+                applied += 1
+                continue
+            # Whitespace-tolerant fallback: match on right-stripped lines.
+            loose = self._loose_replace(code, search, replace)
+            if loose is not None:
+                code = loose
+                applied += 1
+                continue
+            raise ValueError(f"SEARCH block not found in current program: {search.strip()[:70]!r}")
+        return code, applied, full_rewrite
+
+    @staticmethod
+    def _changed_line_fraction(parent_code: str, new_code: str) -> float:
+        """Fraction of the *union* of lines that differ — a cheap, symmetric
+        proxy for edit size. ~0 = tiny incremental edit; ~1 = wholesale rewrite."""
+        a = parent_code.splitlines()
+        b = new_code.splitlines()
+        import difflib
+
+        sm = difflib.SequenceMatcher(a=a, b=b, autojunk=False)
+        same = sum(blk.size for blk in sm.get_matching_blocks())
+        denom = max(len(a), len(b), 1)
+        return 1.0 - (same / denom)
+
+    @staticmethod
+    def _loose_replace(code: str, search: str, replace: str) -> str | None:
+        """Replace *search* in *code* tolerating trailing-whitespace differences."""
+        code_lines = code.splitlines()
+        search_lines = [ln.rstrip() for ln in search.splitlines()]
+        if not search_lines:
+            return None
+        for i in range(len(code_lines) - len(search_lines) + 1):
+            window = [ln.rstrip() for ln in code_lines[i : i + len(search_lines)]]
+            if window == search_lines:
+                new_lines = code_lines[:i] + replace.splitlines() + code_lines[i + len(search_lines) :]
+                return "\n".join(new_lines)
+        return None
+
+    def _build_diff_system_prompt(self, style: str) -> str:
+        instruction = self._domain.style_overrides.get(style) or _STYLE_INSTRUCTIONS.get(
+            style, _STYLE_INSTRUCTIONS["refine"]
+        )
+        return (
+            f"You are improving a program for the domain '{self._domain.name}'.\n"
+            f"Domain description: {self._domain.description}\n\n"
+            "You will be shown the CURRENT program. Propose a SMALL, TARGETED edit "
+            "that improves it. Output ONLY one or more edit blocks in EXACTLY this "
+            "format (no prose, no markdown fences):\n\n"
+            "<<<<<<< SEARCH\n"
+            "<lines copied verbatim from the current program>\n"
+            "=======\n"
+            "<the replacement lines>\n"
+            ">>>>>>> REPLACE\n\n"
+            "Rules:\n"
+            "- The SEARCH text MUST appear verbatim (exact whitespace) in the current program.\n"
+            "- Make focused edits: change or add only what improves the result; preserve the rest.\n"
+            "- To ADD new code, SEARCH for an existing nearby line and REPLACE it with itself plus the new lines.\n"
+            "- You may emit multiple blocks for separate locations.\n"
+            "- Build on what already works rather than rewriting from scratch.\n\n"
+            f"Edit goal ({style}): {instruction}\n\n"
+            + _runtime_budget_hint(self._domain.allowed_imports)
+            + "\nUse ONLY ASCII characters in code."
+        )
+
+    def _build_diff_user_prompt(
+        self,
+        parents: list[ProgramObject],
+        style: str,
+        context: MutationContext,
+    ) -> str:
+        code = parents[0].code
+        best = ""
+        if context.score_history and context.score_history.get("best") is not None:
+            best = f"Current best score in the search: {context.score_history['best']}.\n"
+        return (
+            f"{best}CURRENT program:\n```python\n{code}\n```\n\n"
+            "Propose SEARCH/REPLACE edit block(s) that improve its score. "
+            "Output ONLY the blocks."
+        )
 
     def _mutate_agentic_v1(
         self,
@@ -496,7 +712,10 @@ class LLMMutator:
             parts.append("Domain hints:")
             for hint in self._domain.hints[:8]:
                 parts.append(f"- {hint}")
-        if self._domain.examples:
+        # Domain examples are often full incumbent solutions; including them in a
+        # diverge prompt would re-anchor the model on the very structure we want
+        # to escape. The interface/contract is already in the system prompt.
+        if self._domain.examples and style != "diverge":
             parts.append("Examples:")
             for example in self._domain.examples[:2]:
                 parts.append(example)
@@ -516,7 +735,21 @@ class LLMMutator:
                         f'- {fam}: "{reason}" ({count} occurrence{"s" if count > 1 else ""})'
                     )
 
-        if style in ("synthesize", "recombine") and len(parents) > 1:
+        if style == "diverge":
+            # Withhold the parent algorithm on purpose — the interface/contract
+            # is in the system prompt + domain hints/examples above, so the model
+            # can still produce a valid program, but it has nothing to anchor on
+            # and must invent a different structure.
+            if context.forbidden_structures:
+                parts.append("\n## Approaches already tried — DO NOT reproduce any of these:")
+                for desc in context.forbidden_structures[:6]:
+                    parts.append(f"- {desc}")
+            parts.append(
+                "\nNo parent program is given. Invent a structurally different "
+                "solution from the problem and interface above. It MUST NOT match "
+                "any approach listed above."
+            )
+        elif style in ("synthesize", "recombine") and len(parents) > 1:
             if style == "recombine":
                 parts.append("Parent A (anchor — higher best score):")
                 parts.append(parents[0].code)
@@ -526,7 +759,7 @@ class LLMMutator:
                 parts.append("Parent programs to combine:")
                 for idx, parent in enumerate(parents, start=1):
                     parts.extend([f"Parent {idx}:", parent.code])
-        else:
+        elif parents:
             parts.extend(["Parent program:", parents[0].code])
 
         # Global search narrative for explore/radical styles

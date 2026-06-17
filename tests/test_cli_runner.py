@@ -24,9 +24,12 @@ def test_parse_args_defaults():
 
 def test_main_forwards_every_flag_to_esn_run(monkeypatch):
     calls: dict = {}
-    monkeypatch.setattr(runner, "_load_domain", lambda name: f"DOMAIN:{name}")
-    monkeypatch.setattr(runner, "_build_mutator", lambda kind, domain, model: f"MUT:{kind}:{model}")
-    monkeypatch.setattr(runner, "_build_analyzer", lambda kind, model: f"AN:{kind}:{model}")
+    monkeypatch.setattr(runner, "_load_domain", lambda name, **kw: f"DOMAIN:{name}")
+    monkeypatch.setattr(
+        runner, "_build_mutator", lambda kind, domain, model, **kw: f"MUT:{kind}:{model}"
+    )
+    monkeypatch.setattr(runner, "_build_analyzer", lambda kind, model, **kw: f"AN:{kind}:{model}")
+    monkeypatch.setattr(runner, "_build_predictor", lambda kind, model, **kw: f"PRED:{kind}:{model}")
 
     class _Result:
         best_score = 1.0

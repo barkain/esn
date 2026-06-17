@@ -260,6 +260,14 @@ distinct degraded paths worth knowing:
   the spectral signal disappears. Search runs on **fitness + epistemic novelty**.
   This is a separate warning.
 
+![Spectral spikes accumulate over the run; the spectral mixing weight γ stays at zero until spikes persist for ≥3 consecutive generations, then rises.](assets/spectral-gate-circle-packing.png)
+
+*One real `circle_packing` run with the `[novelty]` embedder (seed 42). The
+spectral mixing weight γ holds at zero through the early generations even as
+spikes appear and disappear — it only lifts off once spikes have **persisted**
+long enough to clear the signal-quality gate. Spectral steering is conservative
+by construction. Reproduce: [`docs/assets/`](../docs/assets).*
+
 ---
 
 ## 5. Selection: the viability bar, and where novelty actually bites
@@ -327,8 +335,24 @@ structurally different approach, `N_sp≈0.9`), C=`1.50` (`N_sp≈0.4`).
 actually keys on — `N_sp` blended with epistemic novelty under the spike gate of
 §4; B and C are admitted on the assumption that blended `N` clears the ≥ 0.1 bar.)
 
-That is the mechanism by which ESN avoids collapse: fitness decides the
-*champion*, but novelty decides what *lives on to be explored*.
+The routing this describes is visible in real runs. Below is one real
+`circle_packing` run (Claude Haiku, seed 42), every candidate plotted by the
+generation it was produced and its score, colored by where it routed:
+
+![Every candidate by generation and score, colored by archive route; on this run the best is the child of a below-best frontier survivor.](assets/frontier-survival-circle-packing.png)
+
+On *this* run the best (2.06) was the child of a candidate that scored **1.75 —
+below the running best of 1.85 at the time** — which could never have been the
+champion, yet survived because the novelty frontier kept it as a viable
+alternative. That illustrates the routing rule: fitness decides the *champion*,
+novelty decides what *lives on to be explored*.
+
+> **Honest caveat.** This is a single-run *illustration of the mechanism*, not
+> evidence that novelty improves outcomes. In controlled multi-seed comparisons
+> (novelty-on vs a fitness-only control, same model and budget, on this benchmark)
+> the two were statistically indistinguishable — novelty's measurable benefit is
+> task-dependent and was **not** demonstrated on circle packing. Read this figure
+> as "how routing works," not "novelty wins."
 
 ---
 
@@ -583,8 +607,8 @@ practice. It owns the spectral pipeline and returns `(epistemic, spectral,
 unified)` per candidate; with no analyzer/memory it cleanly degrades to zeros and
 the search runs on fitness alone.
 
-Plus `Predictor`, an `OperatorCreditModel`, `LocalImprover`, and a batch slot
-scorer, all injectable. Everything domain-specific lives in **one object**, the
+Plus `Predictor`, an `OperatorCreditModel`, an optional `Tuner`
+(continuous-parameter polish), and a batch slot scorer, all injectable. Everything domain-specific lives in **one object**, the
 `DomainSpec` — seed program, compiler, evaluator, and prompt-steering hints. The
 engine itself never changes.
 

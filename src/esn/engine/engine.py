@@ -222,7 +222,8 @@ class ESNEngine:
         credit_model: OperatorCreditModel | None = None,
         config: ESNConfig | None = None,
         seed: int = 42,
-        local_improver: Any | None = None,  # LocalImprover protocol
+        tuner: Any | None = None,  # Tuner protocol (evaluator-guided refinement)
+        enable_divergence: bool = False,  # forced structural-escape slot (experimental, off)
         batch_size: int = 1,
         slot_scorer: BatchSlotScorer | None = None,
         enable_recombination: bool = False,
@@ -234,7 +235,12 @@ class ESNEngine:
         self.analyzer = analyzer
         self.knowledge = knowledge
         self.novelty_computer = novelty_computer
-        self.local_improver = local_improver
+        self.tuner = tuner
+        self.enable_divergence = enable_divergence
+        self._tuner_evals = 0  # evaluator calls spent by the tuner (budget accounting)
+        self._tuned_structures: set[str] = set()  # cfhash of structures given a maturation shot
+        self._diverge_stagnation = 3  # plateau gens before forcing a divergence slot
+        self._diverge_count = 0  # times a divergence slot was forced (observability)
         self.config = config or ESNConfig()
         self._seed = seed
         self._rng = random.Random(seed)  # noqa: S311
@@ -615,14 +621,18 @@ class ESNEngine:
         if k <= 1:
             parents = self._select_parents(mode)
             style = self._select_style(mode)
-            return [([parents[0]], style)]
+            assignments = [([parents[0]], style)]
+        elif self._slot_scorer is None:
+            assignments = self._plan_batch_legacy(mode)
+        else:
+            # Slot scorer still returns (parent_code, style); wrap into lists.
+            scorer_plan = self._slot_scorer.plan_batch(self, mode)
+            assignments = [([p], s) for p, s in scorer_plan]
 
-        if self._slot_scorer is None:
-            return self._plan_batch_legacy(mode)
-
-        # Slot scorer still returns (parent_code, style); wrap into lists.
-        scorer_plan = self._slot_scorer.plan_batch(self, mode)
-        return [([p], s) for p, s in scorer_plan]
+        # Forced structural-escape slot when the search has collapsed to one
+        # structure (no-op otherwise). Runs last so it can override any planner.
+        self._maybe_allocate_diverge_slot(assignments)
+        return assignments
 
     def _plan_batch_legacy(self, mode: SearchMode) -> list[tuple[list[str], str]]:
         """Legacy batch planning with hand-coded portfolio selection.
@@ -698,6 +708,78 @@ class ESNEngine:
             "anchor_branch_id": anchor_branch.id,
             "donor_branch_id": donor_branch.id,
         }
+
+    def _population_structures(self) -> dict[str, str]:
+        """Map control-flow fingerprint -> short description for the live population.
+
+        Uses the elite + frontier archives, keyed by ``cfhash`` (control-flow
+        shape). cfhash is a structural fingerprint finer than the coarse AST
+        ``family``: ring variants that only tweak constants share a cfhash, but a
+        grid has a different one — so this measures *real* structural diversity.
+        """
+        structures: dict[str, str] = {}
+        seen_ids: set[str] = set()
+        records = list(self.elite_archive.get_best(5))
+        try:
+            records += list(self.frontier_archive.get_all())
+        except Exception:  # noqa: BLE001 — frontier accessor is best-effort
+            pass
+        for rec in records:
+            rid = getattr(rec, "id", None)
+            if not rid or rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            code = self._program_store.get(rid, "")
+            if not code:
+                continue
+            feats = extract_ast_features(code)
+            cf = feats.get("cfhash", "")
+            if cf and cf not in structures:
+                structures[cf] = f"{feats.get('family', '?')}: {self._extract_solve_summary(code)}"
+        return structures
+
+    def _should_diverge(self) -> bool:
+        """Fire the forced structural-escape (divergence) slot.
+
+        EXPERIMENTAL and OFF by default (``enable_divergence``). A controlled A/B
+        on circle packing showed it fired often but produced no additional
+        escapes and lowered the mean (it cannibalizes exploitation, and a weak
+        model's parentless candidate is too rough to out-compete the polished
+        incumbent before it can mature). Kept opt-in for further study, not as a
+        default capability.
+
+        When enabled: triggers on score plateau (``stagnation_counter``), and is
+        gated to mutators that can generate from NO parent — the single-shot
+        mutator does; agentic/diff reject parentless calls.
+        """
+        if not self.enable_divergence or self.mutator is None:
+            return False
+        if self.state.stagnation_counter < self._diverge_stagnation:
+            return False
+        return bool(getattr(self.mutator, "supports_parentless_diverge", False))
+
+    def _maybe_allocate_diverge_slot(
+        self, assignments: list[tuple[list[str], str]]
+    ) -> None:
+        """FORCE one non-anchor slot to a parentless 'diverge' generation.
+
+        Unlike the recombine slot (UCB-sampled), this is forced: when the search
+        has structurally collapsed, one slot *must* attempt a brand-new structure.
+        The slot carries no parent (empty list); the mutator's diverge branch
+        withholds the incumbent code and forbids the tried structures.
+        """
+        if not self._should_diverge():
+            return
+        replace_idx: int | None = None
+        for i, (_parents, style) in enumerate(assignments):
+            if i == 0 or style == "recombine":  # spare the anchor + recombine slots
+                continue
+            replace_idx = i
+            break
+        if replace_idx is None:
+            return
+        assignments[replace_idx] = ([], "diverge")
+        self._diverge_count += 1  # observability: how often divergence was forced
 
     def _select_parent_portfolio(self, mode: SearchMode) -> list[str]:
         """Select diverse parents for batched generation.
@@ -813,12 +895,13 @@ class ESNEngine:
             slot=slot,
             style=style,
             mode=mode,
-            parent_code=parents[0],
+            parent_code=parents[0] if parents else "",  # diverge slots are parentless
             context=context,
         )
 
-        # Predict (optional)
-        if self.predictor and self.knowledge:
+        # Predict (optional). Skipped for parentless 'diverge' slots — there is no
+        # parent to predict an improvement over.
+        if self.predictor and self.knowledge and parents:
             hypotheses = self.knowledge.get_active_hypotheses_for_prompt(
                 limit=15, novelty_computer=self.novelty_computer
             )
@@ -897,33 +980,9 @@ class ESNEngine:
             if violations:
                 outcome.errors.extend(violations)
 
-        # Local improvement (deterministic, no LLM)
-        if outcome.success and self.local_improver:
-            try:
-                li_result = self.local_improver.improve(
-                    code=outcome.new_code,
-                    artifact=compile_result.artifact,
-                    score=outcome.score,
-                    evaluator=self.domain.evaluator,
-                )
-                if li_result.improved and li_result.score > outcome.score:
-                    # Stash the raw LLM output BEFORE the polish overwrites
-                    # new_code. Branch identity (aspect signature + centroid)
-                    # must reflect the LLM's actual strategy, not the polish's
-                    # numeric dump artifact.
-                    outcome.raw_code = outcome.new_code
-                    outcome.new_code = li_result.code
-                    outcome.score = li_result.score
-                    outcome.eval_result = self.domain.evaluator(li_result.artifact)
-                    # Polish-shear fix: reclassify family after the polish
-                    # rewrites new_code. The pre-polish classification (set
-                    # above at the eval step) may no longer match the polished
-                    # code's AST structure. Downstream consumers (family
-                    # tracker, slot scorer, CandidateRecord) need the family
-                    # of the code that actually gets stored and scored.
-                    outcome.family = extract_ast_features(outcome.new_code)["family"]
-            except Exception:  # noqa: S110
-                pass
+        # NOTE: tuning runs in _process_outcome (sequential phase), not here —
+        # _run_candidate is thread-safe/pure and the tuner mutates engine state
+        # (_tuned_structures, _tuner_evals).
 
         # Analyze (optional)
         if outcome.success and self.analyzer and self.knowledge:
@@ -955,6 +1014,46 @@ class ESNEngine:
         """
         style = outcome.style
         mode = outcome.mode
+
+        # Tuner: evaluator-guided refinement (no LLM). Runs HERE (sequential) so
+        # the engine-state reads/writes (_tuned_structures, _tuner_evals) are
+        # race free. Tune a candidate when it is near the running best (polish
+        # the incumbent) OR the FIRST appearance of a new control-flow structure.
+        # Keyed by cfhash (not the coarse AST family) so distinct structures each
+        # get a shot; marked tuned only after the tuner MEANINGFULLY ran (spent
+        # evals) so a no-tunable-params candidate doesn't burn the structure's
+        # one maturation chance.
+        _cf = extract_ast_features(outcome.new_code).get("cfhash", "") if outcome.new_code else ""
+        _novel_struct = bool(_cf) and _cf not in self._tuned_structures
+        if outcome.success and self.tuner and (
+            outcome.score >= 0.9 * self._best_score or _novel_struct
+        ):
+            try:
+                t_result = self.tuner.tune(
+                    code=outcome.new_code,
+                    score=outcome.score,
+                    compile=self.domain.compiler.compile,
+                    evaluator=self.domain.evaluator,
+                    seed=self._seed,
+                )
+                self._tuner_evals += t_result.evals_used
+                if _cf and t_result.evals_used > 0:
+                    self._tuned_structures.add(_cf)  # only after a real attempt
+                if t_result.improved and t_result.score > outcome.score:
+                    outcome.raw_code = outcome.new_code
+                    outcome.new_code = t_result.code
+                    outcome.score = t_result.score
+                    outcome.eval_result = self.domain.evaluator(t_result.artifact)
+                    outcome.family = extract_ast_features(outcome.new_code)["family"]
+                    # Re-hash: code_hash was computed pre-tune in _run_candidate.
+                    # (Prediction-surprise and novelty were also computed on the
+                    # pre-tune candidate — acceptable for the optional polish; the
+                    # stored record/score/hash reflect the tuned code.)
+                    outcome.code_hash = hashlib.sha256(
+                        outcome.new_code.encode()
+                    ).hexdigest()[:16]
+            except Exception:  # noqa: S110
+                pass
 
         # Handle failures
         if outcome.failure_stage and outcome.failure_stage != "eval":
@@ -1502,22 +1601,30 @@ class ESNEngine:
         # means "no polish fired" and downstream call sites should fall back
         # to new_code.
         raw_new_code = ""
-        if success and self.local_improver:
+        _cf2 = extract_ast_features(new_code).get("cfhash", "") if new_code else ""
+        _novel_struct2 = bool(_cf2) and _cf2 not in self._tuned_structures
+        if success and self.tuner and (
+            score >= 0.9 * self._best_score or _novel_struct2
+        ):
             try:
-                li_result = self.local_improver.improve(
+                t_result = self.tuner.tune(
                     code=new_code,
-                    artifact=compile_result.artifact,
                     score=score,
+                    compile=self.domain.compiler.compile,
                     evaluator=self.domain.evaluator,
+                    seed=self._seed,
                 )
-                if li_result.improved and li_result.score > score:
+                self._tuner_evals += t_result.evals_used
+                if _cf2 and t_result.evals_used > 0:
+                    self._tuned_structures.add(_cf2)  # only after a real attempt
+                if t_result.improved and t_result.score > score:
                     raw_new_code = new_code
-                    new_code = li_result.code
-                    score = li_result.score
-                    eval_result = self.domain.evaluator(li_result.artifact)
+                    new_code = t_result.code
+                    score = t_result.score
+                    eval_result = self.domain.evaluator(t_result.artifact)
                     compile_result = self.domain.compiler.compile(new_code)
             except Exception:  # noqa: S110
-                pass  # local improvement is best-effort
+                pass  # tuning is best-effort
 
         # Step 10: Analyze (Task 2, optional)
         analysis_data = None
@@ -1849,6 +1956,15 @@ class ESNEngine:
             (extract_ast_features(parents[0])["family"], "high") if parents else ("unknown", "low")
         )
 
+        # Divergence: when this is a diverge slot, describe + fingerprint the
+        # structures already in play so the mutator can avoid reproducing them.
+        forbidden_structures: list[str] = []
+        forbidden_cfhashes: list[str] = []
+        if style == "diverge":
+            pop = self._population_structures()
+            forbidden_structures = list(pop.values())
+            forbidden_cfhashes = list(pop.keys())
+
         # Collect family failure reasons from recent attempt log
         family_failure_reasons: dict[str, list[str]] = {}
         for attempt in self._recent_attempt_log:
@@ -1877,6 +1993,8 @@ class ESNEngine:
             family_summaries=family_summaries,
             parent_family=parent_family,
             family_failure_reasons=family_failure_reasons,
+            forbidden_structures=forbidden_structures,
+            forbidden_cfhashes=forbidden_cfhashes,
         )
 
     def _collect_score_history(self) -> dict[str, Any]:

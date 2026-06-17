@@ -41,6 +41,17 @@ rule — "among viable candidates, prefer the most novel"; for exactly how the
 implementation realizes that and where the two diverge, see
 [docs/how-it-works.md](docs/how-it-works.md).)
 
+![ESN keeps viable-but-below-best candidates on a novelty-ranked frontier; on this run the best is the child of a below-best frontier survivor.](docs/assets/frontier-survival-circle-packing.png)
+
+*How routing works, on one real `circle_packing` run (Claude Haiku, seed 42):
+fitness crowns the champion, while the novelty frontier keeps viable-but-below-best
+candidates alive — here the run's best (2.06) happened to descend from a
+**below-best** candidate (1.75) the frontier preserved. This is a single-run
+illustration of the **mechanism**, not a performance claim: in controlled
+multi-seed tests, novelty-guided vs fitness-only search were statistically
+indistinguishable on this benchmark. Reproducible scripts/data:
+[`docs/assets/`](docs/assets).*
+
 ---
 
 ## Install
@@ -96,9 +107,30 @@ uv run python examples/run.py --domain circle_packing \
     --spectral-threshold-mode hybrid --enable-recombination
 ```
 
+Useful extra knobs on the same runner:
+
+| Flag | What it does |
+|---|---|
+| `--mutator diff` | SEARCH/REPLACE incremental edits instead of full-rewrite ([docs/mutators.md](docs/mutators.md#edit-format-full-rewrite-vs-diff)) |
+| `--analyzer none` | fitness-only (novelty off) — the ablation baseline |
+| `--no-predictor` | disable the Task-1 predictor; by default a predictor (the prediction-surprise novelty term) is wired whenever the analyzer activates novelty |
+| `--tune` | optional **continuous-parameter polish** ([`ParameterTuner`](src/esn/engine/tuner.py)): evaluator-guided search over a candidate's float literals. Helps continuous-parameter problems; a safe no-op on combinatorial/structural ones. Not a structural-escape tool; spends extra evaluator calls |
+| `--enable-divergence` | **experimental, off by default**: forced structural-escape slot on stagnation. A controlled A/B showed no escape benefit; kept opt-in for study |
+| `--seeds 42,7,123` | run several seeds sequentially and print the mean |
+| `--eval-timeout 120` | per-candidate evaluation timeout (seconds) |
+| `--max-tokens 16384` | raise the completion cap so long programs aren't truncated |
+| `--task-prompt "…"` | override the task description the mutator sees (inject hints) |
+| `--repair` | `circle_packing`: cheaply project invalid packings to feasibility before scoring (changes the evaluation — see note below) |
+
+> `--repair` makes the evaluator *repair-tolerant* (it shrinks overlapping /
+> out-of-bounds circles to a valid packing before scoring). It's a search aid, not
+> the standard benchmark — scores produced with `--repair` are **not** comparable
+> to unrepaired results.
+
 `uv run python examples/run.py --help` lists every flag. See
-[docs/mutators.md](docs/mutators.md) for agent-vs-linear, and
-[Use it on your own problem](#use-it-on-your-own-problem) to wire a new task in Python.
+[docs/mutators.md](docs/mutators.md) for agent-vs-linear (and the diff edit
+format), and [Use it on your own problem](#use-it-on-your-own-problem) to wire a
+new task in Python.
 
 ## Credentials / API keys
 
