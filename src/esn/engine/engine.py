@@ -223,6 +223,7 @@ class ESNEngine:
         config: ESNConfig | None = None,
         seed: int = 42,
         tuner: Any | None = None,  # Tuner protocol (evaluator-guided refinement)
+        enable_divergence: bool = False,  # forced structural-escape slot (experimental, off)
         batch_size: int = 1,
         slot_scorer: BatchSlotScorer | None = None,
         enable_recombination: bool = False,
@@ -235,8 +236,9 @@ class ESNEngine:
         self.knowledge = knowledge
         self.novelty_computer = novelty_computer
         self.tuner = tuner
+        self.enable_divergence = enable_divergence
         self._tuner_evals = 0  # evaluator calls spent by the tuner (budget accounting)
-        self._tuned_families: set[str] = set()  # structural families given a maturation shot
+        self._tuned_structures: set[str] = set()  # cfhash of structures given a maturation shot
         self._diverge_stagnation = 3  # plateau gens before forcing a divergence slot
         self._diverge_count = 0  # times a divergence slot was forced (observability)
         self.config = config or ESNConfig()
@@ -737,20 +739,20 @@ class ESNEngine:
         return structures
 
     def _should_diverge(self) -> bool:
-        """Fire divergence when the search has plateaued.
+        """Fire the forced structural-escape (divergence) slot.
 
-        Trigger = score plateau past a threshold. ``stagnation_counter`` only
-        climbs while the best is NOT improving, so it already gates "only when
-        stuck" — when the search is healthy it stays low and divergence never
-        fires. (A finer structural-collapse test proved unreliable: incidental
-        control-flow variation keeps the cfhash count > 1 even when every
-        candidate is the same underlying approach.)
+        EXPERIMENTAL and OFF by default (``enable_divergence``). A controlled A/B
+        on circle packing showed it fired often but produced no additional
+        escapes and lowered the mean (it cannibalizes exploitation, and a weak
+        model's parentless candidate is too rough to out-compete the polished
+        incumbent before it can mature). Kept opt-in for further study, not as a
+        default capability.
 
-        Gated to mutators that can generate from NO parent — the single-shot
-        mutator does; the agentic and diff mutators reject parentless calls, so
-        a divergence slot would be a guaranteed failure for them.
+        When enabled: triggers on score plateau (``stagnation_counter``), and is
+        gated to mutators that can generate from NO parent — the single-shot
+        mutator does; agentic/diff reject parentless calls.
         """
-        if self.mutator is None:
+        if not self.enable_divergence or self.mutator is None:
             return False
         if self.state.stagnation_counter < self._diverge_stagnation:
             return False
@@ -980,7 +982,7 @@ class ESNEngine:
 
         # NOTE: tuning runs in _process_outcome (sequential phase), not here —
         # _run_candidate is thread-safe/pure and the tuner mutates engine state
-        # (_tuned_families, _tuner_evals).
+        # (_tuned_structures, _tuner_evals).
 
         # Analyze (optional)
         if outcome.success and self.analyzer and self.knowledge:
@@ -1014,18 +1016,18 @@ class ESNEngine:
         mode = outcome.mode
 
         # Tuner: evaluator-guided refinement (no LLM). Runs HERE (sequential) so
-        # the engine-state reads/writes (_tuned_families, _tuner_evals) are race
-        # free. Tune a candidate when it is near the running best (polish the
-        # incumbent) OR the FIRST appearance of a new structural family (give a
-        # novel idea a fully tuned evaluation so it can overtake a polished
-        # incumbent instead of being discarded for poorly-chosen constants).
-        _fam = outcome.family or ""
-        _novel_family = bool(_fam) and _fam not in self._tuned_families
+        # the engine-state reads/writes (_tuned_structures, _tuner_evals) are
+        # race free. Tune a candidate when it is near the running best (polish
+        # the incumbent) OR the FIRST appearance of a new control-flow structure.
+        # Keyed by cfhash (not the coarse AST family) so distinct structures each
+        # get a shot; marked tuned only after the tuner MEANINGFULLY ran (spent
+        # evals) so a no-tunable-params candidate doesn't burn the structure's
+        # one maturation chance.
+        _cf = extract_ast_features(outcome.new_code).get("cfhash", "") if outcome.new_code else ""
+        _novel_struct = bool(_cf) and _cf not in self._tuned_structures
         if outcome.success and self.tuner and (
-            outcome.score >= 0.9 * self._best_score or _novel_family
+            outcome.score >= 0.9 * self._best_score or _novel_struct
         ):
-            if _fam:
-                self._tuned_families.add(_fam)
             try:
                 t_result = self.tuner.tune(
                     code=outcome.new_code,
@@ -1035,6 +1037,8 @@ class ESNEngine:
                     seed=self._seed,
                 )
                 self._tuner_evals += t_result.evals_used
+                if _cf and t_result.evals_used > 0:
+                    self._tuned_structures.add(_cf)  # only after a real attempt
                 if t_result.improved and t_result.score > outcome.score:
                     outcome.raw_code = outcome.new_code
                     outcome.new_code = t_result.code
@@ -1590,12 +1594,11 @@ class ESNEngine:
         # means "no polish fired" and downstream call sites should fall back
         # to new_code.
         raw_new_code = ""
-        _novel_family2 = bool(eval_family) and eval_family not in self._tuned_families
+        _cf2 = extract_ast_features(new_code).get("cfhash", "") if new_code else ""
+        _novel_struct2 = bool(_cf2) and _cf2 not in self._tuned_structures
         if success and self.tuner and (
-            score >= 0.9 * self._best_score or _novel_family2
+            score >= 0.9 * self._best_score or _novel_struct2
         ):
-            if eval_family:
-                self._tuned_families.add(eval_family)
             try:
                 t_result = self.tuner.tune(
                     code=new_code,
@@ -1605,6 +1608,8 @@ class ESNEngine:
                     seed=self._seed,
                 )
                 self._tuner_evals += t_result.evals_used
+                if _cf2 and t_result.evals_used > 0:
+                    self._tuned_structures.add(_cf2)  # only after a real attempt
                 if t_result.improved and t_result.score > score:
                     raw_new_code = new_code
                     new_code = t_result.code

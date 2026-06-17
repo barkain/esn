@@ -1,22 +1,26 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright (c) 2026 The ESN authors.
-"""Tuner: domain-agnostic, evaluator-guided refinement of a candidate.
+"""Tuner: optional, evaluator-guided continuous-parameter polish.
 
 A *tuner* takes a successful candidate and tries to raise its score using **only
-the domain evaluator as an oracle** — no domain-specific knowledge. It is the
-exploitation counterpart to ESN's novelty-driven exploration: novelty preserves
-structurally-new candidates, and a tuner *matures* them so a genuinely better new
-structure reveals its true potential instead of being discarded for poorly-tuned
-constants.
+the domain evaluator as an oracle** — no domain-specific knowledge — by searching
+over the candidate's numeric constants.
 
-The bundled :class:`ParameterTuner` is fully general: it treats the float
-literals of any candidate program as a parameter vector and pattern-searches over
-them against the evaluator. Because it uses nothing but the evaluator, it
-generalizes to any domain ESN can express — unlike a hand-written domain solver,
-which is task-specific and not admissible in a framework-vs-framework comparison.
+Scope (be honest about it): the bundled :class:`ParameterTuner` is domain-agnostic
+in *implementation* (AST float literals + evaluator only; a safe no-op when there
+is nothing to tune) but **narrow in effect**. It is *continuous-parameter polish*,
+not a universal capability and NOT a structural-escape tool:
 
-Every evaluator call a tuner makes is reported via ``TuningResult.evals_used`` so
-the cost can be counted against a shared search budget.
+- Helps when solution quality is driven by float literals (thresholds, weights,
+  coefficients, explicitly-written coordinates).
+- Inert on combinatorial/structural problems — a TSP permutation, a string
+  strategy, or geometry whose coordinates are computed in loops (only the shared
+  constants are literals) — and it cannot change a program's *structure* (it never
+  touches integers, ``range`` bounds, or control flow). Empirically it lifted a
+  rough loop-computed grid only ~1.5→1.77; it cannot restructure.
+
+Off by default in the example runner. Every evaluator call is reported via
+``TuningResult.evals_used`` so its cost can be counted against a shared budget.
 """
 
 from __future__ import annotations

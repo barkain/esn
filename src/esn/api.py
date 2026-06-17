@@ -119,6 +119,7 @@ def run(
     analyzer: Analyzer | None = None,
     predictor: Predictor | None = None,
     tuner: Any | None = None,
+    enable_divergence: bool = False,
     seed: int = 42,
     enable_recombination: bool = False,
     spectral_threshold_mode: str = "empirical",
@@ -203,6 +204,7 @@ def run(
         total_generations=generations,
         enable_recombination=enable_recombination,
         tuner=tuner,
+        enable_divergence=enable_divergence,
     )
 
     logger.info(

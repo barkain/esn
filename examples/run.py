@@ -143,16 +143,23 @@ def _parse_args(argv=None) -> argparse.Namespace:
     p.add_argument(
         "--tune",
         action="store_true",
-        help="enable the domain-agnostic ParameterTuner: evaluator-guided "
-        "pattern search over a candidate's float literals (matures promising/"
-        "novel candidates). Spends extra evaluator calls — count them in any "
-        "budget-matched comparison.",
+        help="OPTIONAL continuous-parameter polish (ParameterTuner): pattern-search "
+        "over a candidate's float LITERALS via the evaluator. Helps continuous-"
+        "parameter problems; a no-op on combinatorial/structural ones (no tunable "
+        "floats). Not a structural-escape tool. Spends extra evaluator calls.",
     )
     p.add_argument(
         "--tune-evals",
         type=int,
         default=16,
         help="max evaluator calls the tuner spends per candidate",
+    )
+    p.add_argument(
+        "--enable-divergence",
+        action="store_true",
+        help="EXPERIMENTAL, off by default: forced structural-escape slot on "
+        "stagnation. A controlled A/B showed no escape benefit and a cost; kept "
+        "opt-in for study only.",
     )
     p.add_argument("--generations", type=int, default=20)
     p.add_argument("--batch-size", type=int, default=2)
@@ -230,6 +237,7 @@ def main(argv=None) -> None:
             analyzer=analyzer,
             predictor=predictor,
             tuner=tuner,
+            enable_divergence=args.enable_divergence,
             generations=args.generations,
             batch_size=args.batch_size,
             seed=seed,
