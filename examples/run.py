@@ -97,8 +97,8 @@ def _build_predictor(kind: str, model: str):
 
     Tied to the analyzer tier: a 'none' analyzer means novelty is off, so no
     predictor either. Otherwise a predictor matching the analysis model is wired
-    (this is on by default — the reference v3 benchmark runs with it, and without
-    it the epistemic prediction-surprise signal that feeds selection never forms).
+    (on by default — without it the epistemic prediction-surprise signal that
+    feeds novelty selection never forms; pass --no-predictor to disable).
     """
     if kind == "agent":
         return esn.make_agent_predictor(model=model)

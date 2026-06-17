@@ -1045,6 +1045,13 @@ class ESNEngine:
                     outcome.score = t_result.score
                     outcome.eval_result = self.domain.evaluator(t_result.artifact)
                     outcome.family = extract_ast_features(outcome.new_code)["family"]
+                    # Re-hash: code_hash was computed pre-tune in _run_candidate.
+                    # (Prediction-surprise and novelty were also computed on the
+                    # pre-tune candidate — acceptable for the optional polish; the
+                    # stored record/score/hash reflect the tuned code.)
+                    outcome.code_hash = hashlib.sha256(
+                        outcome.new_code.encode()
+                    ).hexdigest()[:16]
             except Exception:  # noqa: S110
                 pass
 

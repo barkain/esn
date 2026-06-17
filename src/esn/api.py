@@ -151,6 +151,15 @@ def run(
         predictor: Optional ``Predictor``-protocol object (e.g.
             :func:`make_predictor`) adding a prediction-surprise term to the
             epistemic novelty. Inert unless an ``analyzer`` is also supplied.
+        tuner: Optional ``Tuner`` (e.g.
+            :class:`~esn.engine.tuner.ParameterTuner`) — evaluator-guided
+            continuous-parameter polish of candidates. Helps float-literal-driven
+            problems; a safe no-op on combinatorial/structural ones. ``None`` =
+            off.
+        enable_divergence: Experimental, off by default. When True, force a
+            parentless structural-escape ("diverge") slot on stagnation. A
+            controlled study showed no escape benefit on a weak model; kept
+            opt-in.
         seed: Seed for the engine's RNG (reproducibility).
         enable_recombination: When True, let the engine recombine
             high-performing branches (an extra exploration operator). Off by

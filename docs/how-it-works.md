@@ -607,8 +607,8 @@ practice. It owns the spectral pipeline and returns `(epistemic, spectral,
 unified)` per candidate; with no analyzer/memory it cleanly degrades to zeros and
 the search runs on fitness alone.
 
-Plus `Predictor`, an `OperatorCreditModel`, `LocalImprover`, and a batch slot
-scorer, all injectable. Everything domain-specific lives in **one object**, the
+Plus `Predictor`, an `OperatorCreditModel`, an optional `Tuner`
+(continuous-parameter polish), and a batch slot scorer, all injectable. Everything domain-specific lives in **one object**, the
 `DomainSpec` — seed program, compiler, evaluator, and prompt-steering hints. The
 engine itself never changes.
 
