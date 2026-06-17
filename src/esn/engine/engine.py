@@ -758,9 +758,7 @@ class ESNEngine:
             return False
         return bool(getattr(self.mutator, "supports_parentless_diverge", False))
 
-    def _maybe_allocate_diverge_slot(
-        self, assignments: list[tuple[list[str], str]]
-    ) -> None:
+    def _maybe_allocate_diverge_slot(self, assignments: list[tuple[list[str], str]]) -> None:
         """FORCE one non-anchor slot to a parentless 'diverge' generation.
 
         Unlike the recombine slot (UCB-sampled), this is forced: when the search
@@ -1025,8 +1023,10 @@ class ESNEngine:
         # one maturation chance.
         _cf = extract_ast_features(outcome.new_code).get("cfhash", "") if outcome.new_code else ""
         _novel_struct = bool(_cf) and _cf not in self._tuned_structures
-        if outcome.success and self.tuner and (
-            outcome.score >= 0.9 * self._best_score or _novel_struct
+        if (
+            outcome.success
+            and self.tuner
+            and (outcome.score >= 0.9 * self._best_score or _novel_struct)
         ):
             try:
                 t_result = self.tuner.tune(
@@ -1049,9 +1049,7 @@ class ESNEngine:
                     # (Prediction-surprise and novelty were also computed on the
                     # pre-tune candidate — acceptable for the optional polish; the
                     # stored record/score/hash reflect the tuned code.)
-                    outcome.code_hash = hashlib.sha256(
-                        outcome.new_code.encode()
-                    ).hexdigest()[:16]
+                    outcome.code_hash = hashlib.sha256(outcome.new_code.encode()).hexdigest()[:16]
             except Exception:  # noqa: S110
                 pass
 
@@ -1603,9 +1601,7 @@ class ESNEngine:
         raw_new_code = ""
         _cf2 = extract_ast_features(new_code).get("cfhash", "") if new_code else ""
         _novel_struct2 = bool(_cf2) and _cf2 not in self._tuned_structures
-        if success and self.tuner and (
-            score >= 0.9 * self._best_score or _novel_struct2
-        ):
+        if success and self.tuner and (score >= 0.9 * self._best_score or _novel_struct2):
             try:
                 t_result = self.tuner.tune(
                     code=new_code,

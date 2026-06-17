@@ -171,6 +171,9 @@ class ParameterTuner:
                 method=f"parameter pattern search ({n_params} floats, {evals} evals)",
             )
         return TuningResult(
-            improved=False, code=code, score=score, evals_used=evals,
+            improved=False,
+            code=code,
+            score=score,
+            evals_used=evals,
             method=f"no gain ({n_params} floats, {evals} evals)",
         )
