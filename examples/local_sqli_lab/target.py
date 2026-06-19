@@ -150,7 +150,11 @@ class LocalSqliLab:
         sql = f"SELECT id, username FROM users WHERE active = 1 AND username = '{q}'"
         try:
             rows = [(int(r[0]), str(r[1])) for r in conn.execute(sql).fetchall()]
-        except sqlite3.Error as exc:
+        except (sqlite3.Error, ValueError, TypeError) as exc:
+            # A UNION-style injection can return rows whose shape/type differ from
+            # (int id, str username) — e.g. a string in the id column. In a real
+            # app that surfaces as a 500; treat it the same here so a clever payload
+            # yields an error signal instead of crashing the evaluator.
             return TargetResponse(
                 500,
                 "sqlite error: " + str(exc),
