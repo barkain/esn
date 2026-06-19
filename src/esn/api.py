@@ -131,9 +131,10 @@ def run(
     are produced by an **analyzer** — so novelty is not a separate on/off flag:
     pass an ``analyzer`` (e.g. from :func:`make_analyzer`) and the full novelty
     stack is wired automatically. Without an analyzer the engine has no
-    hypothesis source, the novelty signal cannot form, and the search reduces to
-    plain fitness selection; ``run`` **warns loudly** when that happens so the
-    degradation is never silent.
+    hypothesis source, the novelty signal cannot form, and the search runs
+    without novelty (it still uses score, archive, branch, family, and
+    search-mode heuristics); ``run`` **warns loudly** when that happens so the
+    change is never silent.
 
     Args:
         domain: The :class:`~esn.engine.domain.DomainSpec` to search over.
@@ -147,7 +148,8 @@ def run(
         analyzer: An ``Analyzer``-protocol object (e.g. :func:`make_analyzer`)
             that turns evaluated candidates into hypotheses. Supplying it
             **activates** the epistemic-spectral novelty machinery. ``None``
-            (the default) means fitness-only search, with a loud warning.
+            (the default) runs without novelty — the engine still uses its
+            score/archive/branch/family/search-mode heuristics — with a loud warning.
         predictor: Optional ``Predictor``-protocol object (e.g.
             :func:`make_predictor`) adding a prediction-surprise term to the
             epistemic novelty. Inert unless an ``analyzer`` is also supplied.
@@ -191,8 +193,9 @@ def run(
         warnings.warn(
             "esn.run() was called without an `analyzer`, so ESN's "
             "epistemic-spectral novelty machinery is INACTIVE: no hypotheses "
-            "are generated, N_sp / N_ep stay 0, and selection reduces to plain "
-            "fitness search (this is not the full ESN algorithm). Pass "
+            "are generated and N_sp / N_ep stay 0, so the search runs without "
+            "novelty (it still uses score, archive, branch, family, and "
+            "search-mode heuristics; this is not the full ESN algorithm). Pass "
             "analyzer=esn.make_analyzer(model=...) (and optionally "
             "predictor=esn.make_predictor(model=...)) to enable novelty-guided "
             "search.",
