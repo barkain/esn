@@ -156,11 +156,10 @@ supply the direction. Direction must come from the objective, not the model's pr
 > our tests, came from objective feedback rather than the signal. Best used as a
 > *trigger/diagnostic*. **Scope:** this is *only* about the guidance-*text*-as-prompt-steer
 > mechanism. It is **not** a claim about novelty-guided *selection* (`N_sp` ranking the
-> frontier and choosing parents) — that is ESN's core premise, validated separately
-> (against the `run_v3.py` reference, after fixing a path where novelty was
-> disconnected) as connected, working, and valuable. The two findings coexist: novelty
-> *selection* earns its place; the guidance *text*, pasted into the prompt, doesn't
-> author a domain direction. See [how-it-works.md](how-it-works.md) for the mechanism.
+> frontier and choosing parents) — ESN's core premise, which steers the search and is
+> unaffected by this finding. The two coexist: novelty *selection* earns its place; the
+> guidance *text*, pasted into the prompt, doesn't author a domain direction. See
+> [how-it-works.md](how-it-works.md) for the mechanism.
 
 ---
 
