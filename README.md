@@ -15,7 +15,7 @@ loop" pattern.
 
 The difference is *what gets selected*. A naive loop keeps whatever scored
 highest, so it quickly collapses onto one idea and burns expensive LLM calls
-re-deriving variations of the same approach. `esn` instead steers
+re-deriving variations of the same approach. `esn` instead **biases**
 selection with an **epistemic spectral-novelty signal**: it maintains a memory
 of the structures it has already learned, runs a spectral analysis over that
 memory, and measures how *structurally unlike* each new candidate is from
@@ -51,7 +51,7 @@ fitness crowns the champion, while the novelty frontier keeps viable-but-below-b
 candidates alive — here the run's best (2.06) happened to descend from a
 **below-best** candidate (1.75) the frontier preserved. This is a single-run
 illustration of the **mechanism**, not a performance claim: in controlled
-multi-seed tests, novelty-guided vs fitness-only search were statistically
+multi-seed tests, novelty-guided vs novelty-off search were statistically
 indistinguishable on this benchmark. Reproducible scripts/data:
 [`docs/assets/`](docs/assets).*
 
@@ -117,7 +117,7 @@ Useful extra knobs on the same runner:
 | Flag | What it does |
 |---|---|
 | `--mutator diff` | SEARCH/REPLACE incremental edits instead of full-rewrite ([docs/mutators.md](docs/mutators.md#edit-format-full-rewrite-vs-diff)) |
-| `--analyzer none` | fitness-only (novelty off) — the ablation baseline |
+| `--analyzer none` | novelty off (engine still uses score/archive/branch/family heuristics) — the ablation baseline |
 | `--no-predictor` | disable the Task-1 predictor; by default a predictor (the prediction-surprise novelty term) is wired whenever the analyzer activates novelty |
 | `--tune` | optional **continuous-parameter polish** ([`ParameterTuner`](src/esn/engine/tuner.py)): evaluator-guided search over a candidate's float literals. Helps continuous-parameter problems; a safe no-op on combinatorial/structural ones. Not a structural-escape tool; spends extra evaluator calls |
 | `--enable-divergence` | **experimental, off by default**: forced structural-escape slot on stagnation. A controlled A/B showed no escape benefit; kept opt-in for study |

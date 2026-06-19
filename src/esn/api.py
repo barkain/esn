@@ -148,7 +148,8 @@ def run(
         analyzer: An ``Analyzer``-protocol object (e.g. :func:`make_analyzer`)
             that turns evaluated candidates into hypotheses. Supplying it
             **activates** the epistemic-spectral novelty machinery. ``None``
-            (the default) means fitness-only search, with a loud warning.
+            (the default) runs without novelty — the engine still uses its
+            score/archive/branch/family/search-mode heuristics — with a loud warning.
         predictor: Optional ``Predictor``-protocol object (e.g.
             :func:`make_predictor`) adding a prediction-surprise term to the
             epistemic novelty. Inert unless an ``analyzer`` is also supplied.

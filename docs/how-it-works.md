@@ -255,8 +255,9 @@ A practical consequence: full `N_sp` wants a real embedder, and there are two
 distinct degraded paths worth knowing:
 
 - **No analyzer at all** — the default. No hypotheses ever form, so there is no
-  memory, both `N_sp` and `N_ep` stay zero, and selection reduces to **plain
-  fitness**. This is the loud warning `esn.run` emits when you call it without an
+  memory and both `N_sp` and `N_ep` stay zero: the search runs **without
+  novelty**, still using the engine's score, archive, branch, family, and
+  search-mode heuristics. This is the loud warning `esn.run` emits when you call it without an
   `analyzer`.
 - **Analyzer present, but no `[novelty]` embedder** — hypotheses still form, so
   *epistemic* novelty still works, but embeddings collapse to zero vectors and
@@ -354,7 +355,7 @@ while novelty biases which viable non-best candidates *survive to be explored*.
 
 > **Honest caveat.** This is a single-run *illustration of the mechanism*, not
 > evidence that novelty improves outcomes. In controlled multi-seed comparisons
-> (novelty-on vs a fitness-only control, same model and budget, on this benchmark)
+> (novelty-on vs a novelty-off control, same model and budget, on this benchmark)
 > the two were statistically indistinguishable — novelty's measurable benefit is
 > task-dependent and was **not** demonstrated on circle packing. Read this figure
 > as "how routing works," not "novelty wins."
