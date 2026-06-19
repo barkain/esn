@@ -21,19 +21,22 @@ of the structures it has already learned, runs a spectral analysis over that
 memory, and measures how *structurally unlike* each new candidate is from
 everything understood so far (the spectral-novelty score, `N_sp`).
 
-`N_sp` then shapes selection on **two fronts that decide what the next LLM call
-explores** — without ever letting novelty override fitness:
+When spectral structure passes its quality gates, `N_sp` is blended with an
+**epistemic-novelty** term into a single *unified novelty* score, which then
+biases selection on **two fronts** — without ever letting novelty override
+fitness:
 
 - **The champion is chosen by fitness.** The run's best is the highest-scoring
   *viable* candidate (it must clear a small improvement deadband). Novelty does
   not tie-break or overrule score here.
-- **Novelty decides what survives to be explored.** Viable-but-not-best
-  candidates that are novel enough are kept in a **frontier archive ranked by
-  novelty**, which (together with branch-aware sampling and the current best)
-  feeds the next generation's parents. So a structurally new idea that scored just
-  below the best is preserved
-  and gets to seed future mutations, instead of being discarded the way a naive
-  loop would.
+- **Novelty biases which viable-but-not-best candidates survive.** Successful
+  non-elite candidates are admitted to and ranked in a **frontier archive by
+  unified novelty**. Frontier members are then *one* parent source — sampled
+  alongside the current best, live branches, and under-explored families — to seed
+  the next generation. So a structurally new idea that scored just below the best
+  can be preserved and seed future mutations instead of being discarded the way a
+  naive loop would. (The LLM/mutator still authors every candidate; novelty only
+  shapes which survive to be built on.)
 
 The result is exploration that does not crash fitness and exploitation that does
 not stagnate. (The design intent is often summarized as an *epsilon-band Pareto*
@@ -80,7 +83,9 @@ API keys), `--extra novelty` (learned-embedding `N_sp`). Requires Python ≥ 3.1
 A multi-turn Claude *agent* proposes each mutation. `make_agent_mutator` +
 `make_agent_analyzer` authenticate through your local Claude install / macOS
 keychain — **no API key**. Pass a real `analyzer` so novelty (`N_sp`) is active
-(without one `esn.run` warns and degrades to plain fitness search).
+(without one `esn.run` warns and runs without novelty — no hypothesis memory
+forms, so `N_sp`/epistemic/unified novelty stay inactive; the engine still uses
+its score, archive, branch, family, and search-mode heuristics).
 
 ```bash
 uv sync --extra agent --extra novelty   # subscription SDK + learned-embedding N_sp
@@ -142,7 +147,7 @@ new task in Python.
 
 ## Core concepts
 
-- **`N_sp` (spectral-novelty score)** — how *structurally unlike* a candidate is from everything learned so far; the signal that steers selection.
+- **`N_sp` (spectral-novelty score)** — a gated measurement of how *structurally unlike* a candidate is from everything learned so far; one input (blended into *unified novelty*) that biases which viable candidates survive.
 - **Hypothesis** — what the analyzer extracts from each evaluated candidate; the memory `N_sp` is measured against.
 - **Spectral analysis** — the decomposition over that hypothesis memory used to compute `N_sp`.
 - **Fitness-gated selection** — the run's best is the highest-scoring *viable* candidate (novelty never overrides score); novelty instead ranks the **frontier archive** and feeds parent selection, deciding which viable-but-not-best ideas survive to be explored next. (Often summarized as an *epsilon-band Pareto* intent — "among viable candidates, prefer the most novel.")

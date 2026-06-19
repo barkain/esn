@@ -20,8 +20,11 @@ This decides `program_interface` and which compiler you pass:
 
 All three compilers are top-level `esn.*` exports satisfying the
 `ProgramCompiler` protocol (`compile(code, seed) -> CompilerResult`).
-**Import allowlists and line limits live on the compiler**, not the `DomainSpec`
-(e.g. `UvSandboxCompiler(allowed_imports=frozenset({"numpy"}), max_lines=...)`).
+**Import allowlists and line limits are set on the `DomainSpec`**
+(`allowed_imports`, `max_code_lines`) — these drive the mutator's AST validation
+of generated code. A compiler can also take `max_lines` (enforced at compile);
+note `UvSandboxCompiler`'s own `allowed_imports` is not used for AST import
+gating, so put the allowlist on the `DomainSpec`.
 
 ## Fields
 
@@ -46,7 +49,8 @@ All three compilers are top-level `esn.*` exports satisfying the
 | `preferred_solution_shape` | `None` | Advisory steer toward the *shape* of a good solution (e.g. "prefer constructive solutions over long search"). No compile/eval effect. |
 
 (`style_overrides` — per-style prompt overrides. Import allowlists and line
-limits are set on the **compiler**, not here — see above.)
+limits are the `allowed_imports` / `max_code_lines` fields above — see the note
+on where they apply.)
 
 ## The evaluator contract
 
@@ -104,7 +108,8 @@ For full worked specs, see [`examples/circle_packing`](../examples/circle_packin
 
 ## Enabling novelty (the `N_sp` signal)
 
-ESN steers search with a spectral-novelty signal, `N_sp`. Passing an **analyzer**
+ESN biases selection with a novelty signal: `N_sp` (a gated structural-novelty
+measurement) blended with epistemic novelty into *unified novelty*. Passing an **analyzer**
 to `esn.run(...)` activates the novelty machinery (hypotheses + epistemic novelty);
 without one, `esn.run` warns loudly that novelty is inactive. The spectral `N_sp`
 signal additionally needs the `[novelty]` embedder — without it embeddings are

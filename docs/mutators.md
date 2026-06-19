@@ -40,7 +40,7 @@ mutator = esn.make_llm_mutator(domain, model="gpt-4o")
 result = esn.run(domain, mutator=mutator, generations=20)
 ```
 
-Proven on `circle_packing` with `gpt-4o-mini`.
+Works with the bundled `circle_packing` example (e.g. `gpt-4o-mini`).
 
 ### Edit format: full-rewrite vs diff
 
@@ -91,7 +91,7 @@ mutator = esn.make_agent_mutator(domain, model="claude-haiku-4-5-20251001")
 result = esn.run(domain, mutator=mutator, generations=20)
 ```
 
-Proven on `circle_packing` (1.6602 → 1.8003) and `tsp`.
+Works with the bundled `circle_packing` and `tsp` examples.
 
 ## Driving novelty: the analyzer
 
@@ -120,5 +120,5 @@ constants, a safe no-op otherwise.
 
 See [connecting-a-problem.md](connecting-a-problem.md) for how to build the
 `DomainSpec` these mutators operate on, and
-[how-it-works.md](how-it-works.md) for how the analyzer's hypotheses drive the
-spectral-novelty signal that steers selection.
+[how-it-works.md](how-it-works.md) for how the analyzer's hypotheses feed the
+spectral-novelty signal that biases selection.

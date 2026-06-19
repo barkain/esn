@@ -5,7 +5,7 @@ mutations of a candidate program, each candidate is compiled and scored, and the
 best ones seed the next round. That part is the familiar "LLM in a loop." What
 makes ESN different is that it keeps a running, structured memory of *what the
 search has already learned* — a bank of small causal **hypotheses** extracted
-from every evaluated candidate — and it uses a spectral analysis of that memory
+from evaluated candidates — and it uses a spectral analysis of that memory
 to ask, for each new candidate: *how structurally unlike everything understood so
 far is this?* That signal (`N_sp`) is mixed into how the search picks parents and
 what it keeps. The failure mode it fixes is the one every naive loop hits:
@@ -57,8 +57,9 @@ biased toward the informative ones.
 The engine ([`ESNEngine`](../src/esn/engine/engine.py)) runs one generation at a
 time. With a batch size above 1 it mutates *k* candidates per generation in three
 phases; the single-candidate path runs the same steps inline (with minor
-differences — e.g. it also analyzes failed candidates, which the batched path
-skips).
+differences — e.g. it also analyzes candidates that compiled but scored as
+failures, i.e. evaluator `success=False`, which the batched path skips; mutation,
+validation, and compile failures are recorded without analysis on either path).
 
 ```
               ┌──────────────────────────────────────────────────────────┐
@@ -224,10 +225,12 @@ N_sp = ‖ẽ − V_k V_kᵀ ẽ‖²  /  ‖ẽ‖²        (the residual energ
 
 `N_sp = 1` means the candidate lies entirely outside known structure (fully
 novel); `N_sp = 0` means it is fully explained by it.
-([`compute_gram_schmidt_residual`](../src/esn/core/spectral.py).) Be aware of one
-deliberately surprising default: when the subspace or mean is missing or the
-centered vector is near zero, `N_sp` returns `1.0` ("treat as fully novel"), so on
-a cold or empty memory everything reads as maximally new.
+([`compute_gram_schmidt_residual`](../src/esn/core/spectral.py).) Be aware of the
+cold-start behavior: the low-level residual helper returns `1.0` when the subspace
+or mean is missing, but the public `NoveltyComputer` *suppresses* spectral novelty
+to `0.0` until a spectral state with detected spikes exists. So on a cold or empty
+memory `N_sp` behaves as *no* spectral signal — selection falls back to epistemic
+novelty (or no novelty) — not as "everything maximally new."
 
 ### What this means in practice (the gates)
 
@@ -310,10 +313,12 @@ the substance of the "good *and* new" claim:
   novelty-ranked reservoir of viable-but-not-best ideas.
 - **Parent selection.** Parents are chosen **branch-aware first**: when there are
   ≥ 2 live branches the engine samples by role (anchor / continuation / breakout /
-  diversity) and always anchors on the global best; only when branches are too few
-  does it fall back to a portfolio drawn from underdeveloped families, the top
-  elites, and the most novel frontier members. Either way, a candidate that wasn't
-  the best but seeded a distinct, novel branch gets to propagate.
+  diversity). In the **batched** path the global best is always included as a
+  safety anchor in the parent portfolio, drawn alongside underdeveloped families,
+  top elites, and the most novel frontier members; the **single-candidate** EXPLORE
+  path may instead return a branch, under-explored family, or frontier parent
+  directly, without anchoring on the best. Either way, a candidate that wasn't the
+  best but seeded a distinct, novel branch gets to propagate.
 
 A concrete micro-example. Suppose the current best is `1.80` and this generation
 produces three successes: A=`1.81` (a minor refinement, `N_sp≈0.0`), B=`1.79` (a
@@ -345,7 +350,7 @@ On *this* run the best (2.06) was the child of a candidate that scored **1.75 �
 below the running best of 1.85 at the time** — which could never have been the
 champion, yet survived because the novelty frontier kept it as a viable
 alternative. That illustrates the routing rule: fitness decides the *champion*,
-novelty decides what *lives on to be explored*.
+while novelty biases which viable non-best candidates *survive to be explored*.
 
 > **Honest caveat.** This is a single-run *illustration of the mechanism*, not
 > evidence that novelty improves outcomes. In controlled multi-seed comparisons
@@ -517,10 +522,12 @@ analysis costs latency and money, while compiling and scoring a candidate in a
 good solution in **fewer expensive creative steps**, and every part of the design
 spends *cheap* computation to make each *expensive* call count.
 
-- **It stops paying for the same idea twice.** A greedy loop collapses onto one
-  approach and burns calls re-deriving variations of it. Scoring structural
-  novelty against the memory — and deduping that memory — routes budget away from
-  near-duplicates the model has already produced.
+- **It reduces duplicate pressure.** A greedy loop collapses onto one approach and
+  burns calls re-deriving variations of it. ESN ranks low-novelty non-elite
+  successes out of the frontier and shrinks the next batch when recent candidates
+  duplicate or collapse — so familiar ideas lose budget *after the fact*. (There is
+  no pre-mutation gate; the model can still re-emit a familiar idea, but it won't
+  keep earning exploration budget.)
 - **No high-novelty viable call's output is wasted.** A success below the current
   best isn't discarded for *being* below best — if it clears the frontier's novelty
   bar it's kept on the novelty-ranked frontier and can become a parent. In §7 the
