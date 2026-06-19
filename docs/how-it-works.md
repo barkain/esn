@@ -31,6 +31,17 @@ ahead of the code is spelled out in
 [Selection](#5-selection-the-viability-bar-and-where-novelty-actually-bites)
 below.
 
+A second note, on what the spectral signal empirically *does*: `N_sp` is a real
+and useful **measurement** of how the hypothesis population has spread or
+stagnated, and it is what this page describes. But it is a *trigger/diagnostic*,
+not an author — in controlled tests the spectral guidance text, as injected, did
+not by itself supply the domain-specific *direction* that unlocks a weak model's
+structural escape. The thing that empirically moves a weak model is
+**objective-grounded feedback** (the evaluator's own diagnostics turned into a
+positive directive). What works, what doesn't, and how to measure "did this add
+intelligence vs just compute" are documented in
+[weak-model-amplification.md](weak-model-amplification.md).
+
 ---
 
 ## 1. The big idea in one paragraph

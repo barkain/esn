@@ -151,6 +151,11 @@ For the full mechanism — the generation loop, the spectral math behind `N_sp`,
 how candidates are selected and archived, and where the implementation diverges
 from the *epsilon-band Pareto* framing — see **[docs/how-it-works.md](docs/how-it-works.md)**.
 
+For an empirical study of **what actually moves a weak model** — why "be novel"
+and self-diagnosis do nothing, why *objective-grounded feedback* works, and how to
+measure whether a technique added *intelligence* versus just more *compute* — see
+**[docs/weak-model-amplification.md](docs/weak-model-amplification.md)**.
+
 ---
 
 ## Use it on your own problem
