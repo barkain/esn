@@ -40,7 +40,14 @@ from pathlib import Path
 import esn
 
 
-def _load_domain(name: str, *, eval_timeout: int = 60, repair: bool = False, task_prompt=None):
+def _load_domain(
+    name: str,
+    *,
+    eval_timeout: int = 60,
+    repair: bool = False,
+    task_prompt=None,
+    difficulty: str = "easy",
+):
     """Build the chosen example DomainSpec (importable regardless of launch cwd)."""
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     if name == "circle_packing":
@@ -59,6 +66,12 @@ def _load_domain(name: str, *, eval_timeout: int = 60, repair: bool = False, tas
         from local_sqli_lab.domain import create_local_sqli_lab_domain_spec
 
         domain = create_local_sqli_lab_domain_spec()
+    elif name == "web_ctf_chain":
+        if repair:
+            raise ValueError("--repair is only supported for the circle_packing domain")
+        from web_ctf_chain.domain import create_web_ctf_chain_domain_spec
+
+        domain = create_web_ctf_chain_domain_spec(difficulty=difficulty)
     else:
         raise ValueError(f"unknown domain {name!r}")
     if task_prompt:
@@ -115,8 +128,17 @@ def _parse_args(argv=None) -> argparse.Namespace:
     )
     p.add_argument(
         "--domain",
-        choices=["circle_packing", "tsp", "local_sqli_lab"],
+        choices=["circle_packing", "tsp", "local_sqli_lab", "web_ctf_chain"],
         default="circle_packing",
+    )
+    p.add_argument(
+        "--difficulty",
+        choices=["easy", "hard", "expert"],
+        default="easy",
+        help="web_ctf_chain only: 'easy' spells out the exploit in the prompt; "
+        "'hard' describes only the endpoints + feedback, forcing discovery; "
+        "'expert' adds an uncapped privilege ladder above admin (admin -> aud -> "
+        "freshness -> root) so the score keeps separating capability",
     )
     p.add_argument(
         "--mutator",
@@ -218,6 +240,7 @@ def main(argv=None) -> None:
         eval_timeout=args.eval_timeout,
         repair=args.repair,
         task_prompt=args.task_prompt,
+        difficulty=args.difficulty,
     )
     mutator = _build_mutator(args.mutator, domain, args.mutation_model, max_tokens=args.max_tokens)
     analyzer = _build_analyzer(args.analyzer, args.analysis_model)
