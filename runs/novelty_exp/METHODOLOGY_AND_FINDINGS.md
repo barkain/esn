@@ -92,7 +92,35 @@ circles and/or measure progress ABOVE the 2.5 grid ceiling (see OPEN).
   on both seeds (2.498 vs 2.406, n=2, weak); ESN ~= ShinkaEvolve (competitive, no winner).
   Retracted an earlier overclaim table ("fully settled, Shinka loses") — was cherry-picked n=1-2.
 
-## OPEN (the ONE experiment worth running next)
+## FINAL VERDICT on the de-degenerated task (DOMAIN=nz, r>0, results_nz.jsonl)
+
+Ran single-shot vs ESN-iter vs ESN-iter+novelty on the nz domain (no 2.5 freebie),
+4o-mini, ~6 seeds each. **NOTHING exceeded 2.167 (the uniform-grid line) — 0 of ~17
+runs.** I.e. zero real varied-radii optimization on any arm.
+| arm | mean | max | >2.167 |
+|---|---|---|---|
+| iter (ESN)            | 1.991 | 2.123 | 0/6 |
+| single-shot           | 1.916 | 2.167 | 0/6 |
+| iter_nov (ESN+novelty)| 1.793 | 1.838 | 0/5 |
+
+CONCLUSIONS (trustworthy — confound-free metric):
+1. 4o-mini is TOO WEAK to optimize this task; the uniform grid is its ceiling.
+   ESN cannot manufacture capability the model lacks -> weak-model-amplification
+   thesis NOT supported.
+2. ESN-iter is the most CONSISTENT (tightest mean) but can't break the grid (stuck
+   just below it); single-shot reaches the grid more often but is erratic. Wash.
+3. Novelty/spectral is ACTIVELY HARMFUL here: iter_nov is the lowest arm despite
+   spectral verifiably firing (spike-gens 3-12, N_sp live 7-30). The dim=8 fix
+   engages the mechanism; the signal (over 4o-mini's weak hypotheses) diverts the
+   search and costs score.
+4. The ONLY place ESN+novelty showed (weak, n=2) value was the CAPABLE model
+   (Haiku, agentic, scores >2.5 above the grid) — opposite of the thesis.
+
+BOTTOM LINE: on this task with a weak LLM-call model, ESN's evolution + novelty do
+not extract optimization beyond sampling, and novelty hurts. ESN's (marginal) value
+appears only on models already capable of real optimization. Stop spending here.
+
+## OPEN (only if revisiting)
 - Powered jackpot-rate test: single-shot vs iteration, n>=24 seeds, clean engine, matched n_evals,
   P(>=2.4). If iteration's edge holds at significance -> thesis (ESN extracts the 2.5 grid that
   single-shot can't) is SUPPORTED. Optionally repeat on a WEAKER model (gpt-3.5-turbo /
