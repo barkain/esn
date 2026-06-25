@@ -22,7 +22,10 @@ import esn  # noqa: E402
 import esn.api as api  # noqa: E402
 from esn.core import novelty as novelty_mod  # noqa: E402
 from esn.core import spectral as spectral_mod  # noqa: E402
-from biasfree import biasfree_domain  # noqa: E402
+if os.environ.get("DOMAIN") == "nz":
+    from biasfree_nz import biasfree_nz_domain as biasfree_domain  # noqa: E402
+else:
+    from biasfree import biasfree_domain  # noqa: E402
 
 arg = sys.argv[1] if len(sys.argv) > 1 else "8"
 seed = int(sys.argv[2]) if len(sys.argv) > 2 else 42
