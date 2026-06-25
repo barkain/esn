@@ -2,6 +2,28 @@
 
 Consolidated so we stop re-proving the same things. Date: 2026-06-25.
 
+## ⚠️ CRITICAL CAVEAT — the 2.5 "jackpot" is a DEGENERATE trivial grid (read first)
+
+The score 2.500000 that dominates every comparison is NOT real optimization. Captured and
+ran an actual 2.5 candidate: it returns **25 identical circles of r=0.1 in a 5x5 grid**
+(touching each other + walls: 25*0.1 = 2.5 exactly) **+ a 26th circle of radius 0** wasted in
+a corner. radii = [0.1 x25, 0.0]. success=True (genuinely valid — NOT a code bug; grepped the
+scoring path, no hardcoded 2.5/cap; evaluator validates + sums correctly).
+
+So "reaching 2.5" = "the model wrote the dead-simplest 5x5 touching grid" — it wastes a circle,
+uses uniform radii (zero size-optimization, the whole point of the task), and is a trivial
+local optimum. **P(reach 2.5) measures grid-stumbling luck, NOT search/optimization quality.**
+Nothing in any run ever pushed PAST the grid toward real SOTA (2.635, which needs VARIED radii
+using all 26 circles). The score distribution is bimodal = "messy attempt ~1.8" vs "trivial
+grid 2.5", and **neither ESN nor best-of-N does genuine packing optimization here.**
+
+CONSEQUENCE: every jackpot-rate comparison below (iteration vs single-shot, the 4o-mini-vs-
+gpt-3.5 flip) is contaminated by this — they compare how often each method stumbles onto a
+freebie grid. gpt-3.5 hit it 0/18 fresh batches (vs 2/12 in one grid = barely-replicable
+outliers). **Treat all "reaches 2.5" results as a degenerate-plateau artifact, not evidence
+about ESN vs sampling.** To get a discriminating metric you must forbid degenerate/zero-radius
+circles and/or measure progress ABOVE the 2.5 grid ceiling (see OPEN).
+
 ## Task / setup
 - Domain: bias-free `circle_packing` — 26 circles in unit square, maximize sum of radii.
   Seed "ring" program scores **1.66023**. AlphaEvolve SOTA ~2.635. A valid 5x5 grid
