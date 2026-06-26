@@ -16,6 +16,9 @@ from esn import DomainSpec, EvaluationDiagnostics, EvaluationResult, UvSandboxCo
 from circle_packing.domain import evaluate_circle_packing_artifact, _initial_program_code
 
 MIN_RADIUS = float(os.environ.get("NZ_MIN_RADIUS", "0.0"))
+TIMEOUT = int(os.environ.get("NZ_TIMEOUT", "60"))
+_seed_path = os.environ.get("NZ_SEED")
+SEED_CODE = open(_seed_path).read() if _seed_path else _initial_program_code()
 
 if MIN_RADIUS > 0:
     _rule = f"Every one of the 26 circles must have radius >= {MIN_RADIUS} (no degenerate or near-zero circles)."
@@ -35,7 +38,7 @@ CONTRACT = [
     "No two circles may overlap.",
     "Every circle lies entirely within [0,1] x [0,1].",
     "Return (centers, radii) as numpy arrays of shape (26,2) and (26,).",
-    "The program must finish within 60 seconds.",
+    f"The program must finish within {TIMEOUT} seconds.",
 ]
 
 
@@ -62,14 +65,14 @@ def biasfree_nz_domain():
     return DomainSpec(
         name="circle_packing",
         description=BARE_OBJECTIVE,
-        initial_code=_initial_program_code(),
+        initial_code=SEED_CODE,
         compiler=UvSandboxCompiler(
             allowed_imports=frozenset({"numpy", "math", "scipy", "itertools", "collections", "functools", "random", "heapq", "bisect"}),
-            max_lines=None, timeout_seconds=60, seed=42),
+            max_lines=None, timeout_seconds=TIMEOUT, seed=42),
         evaluator=evaluate_nonzero,
         allowed_imports=None, max_code_lines=None,
         hard_constraints=CONTRACT,
-        examples=[_initial_program_code()],
+        examples=[SEED_CODE],
         hints=[],
         preferred_solution_shape=None,
     )

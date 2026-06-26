@@ -42,6 +42,25 @@ if os.environ.get("NEUTRALIZE_GATE", "1") == "1":
     _eng.PARENT_QUALITY_FLOOR_RATIO = 0.0
     print(f"GATE_NEUTRALIZED floor={_eng.PARENT_QUALITY_FLOOR_RATIO}", flush=True)
 
+# --- Strip the mutator's anti-optimization constraint (suspected prompt bias
+# steering 4o-mini toward uniform greedy grids). Set STRIP_ANTIOPT=1. ---
+if os.environ.get("STRIP_ANTIOPT") == "1":
+    import re as _re
+    from esn.engine import mutator as _mut
+    _AO = _re.compile(r"CRITICAL RUNTIME CONSTRAINT.*?greedy algorithms with early stopping\.\n", _re.S)
+    _orig_sp = _mut.LLMMutator._build_system_prompt
+    def _stripped_sp(self, style):
+        return _AO.sub("Use bounded loops so the program finishes within the time limit.\n", _orig_sp(self, style))
+    _mut.LLMMutator._build_system_prompt = _stripped_sp
+    print("ANTIOPT_STRIPPED", flush=True)
+
+# --- OpenEvolve-spirit mutator prompt (encourages optimization/varied sizes/
+# rewrites, no forbidding language, no specific tool names). Set OPENEVOLVE_PROMPT=1. ---
+if os.environ.get("OPENEVOLVE_PROMPT") == "1":
+    import oe_prompt
+    oe_prompt.install()
+    print("OPENEVOLVE_PROMPT installed", flush=True)
+
 # --- Force spectral_dim before the compressor is constructed ---
 if nov:
     def patched_stack(seed, spectral_threshold_mode="empirical"):
