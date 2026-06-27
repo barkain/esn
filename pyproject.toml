@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "esn"
-version = "0.3.0"
+version = "0.4.0"
 description = "A general-purpose, novelty-guided program/solution generator: LLM-driven evolutionary search biased by an epistemic spectral-novelty signal."
 readme = "README.md"
 requires-python = ">=3.10"
