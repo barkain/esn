@@ -50,9 +50,11 @@ Skipping any of them produces a false negative ("ESN doesn't work").
   - **Evolution 20 gen** — ESN, 20 generations × batch 4, with and without novelty.
   - **Evolution 40 gen** — ESN + spectral novelty, 40 generations × batch 4 (heavy).
 - **Budget** reported per run as actual candidate evaluations (`n_evals`); arms matched.
-- **Replication:** sampling & 20-gen arms at n=11 seeds; 40-gen heavy at n=2 (a *capability*
-  / existence demonstration). Note: the LLM mutator is unseeded, so each "seed" is an
-  independent draw of the stochastic pipeline.
+- **Replication:** 20-gen arms at n=11 seeds; sampling at n=13 (best-of-80 ×11 +
+  best-of-160 ×2); 40-gen heavy at n=2 (a *capability* / existence demonstration).
+  Note: the LLM mutator is unseeded, so each "seed" is an independent draw of the
+  stochastic pipeline. (The "~2.614" sampling figure is the best-of-160 budget matched
+  to the heavy arm; the full sampling mean is 2.6118.)
 
 ## 4. Results
 
@@ -96,15 +98,27 @@ engagement → higher scores.
 
 ## 7. Reproduce
 
-Harness in `runs/novelty_exp/` (gitignored scratch; force-added for the record):
+Use the wrapper. It sets up the `nz` domain, OpenEvolve-style prompt, scipy seed,
+90 s sandbox timeout, clean parent gate, and the spectral-dim fix internally.
+Set either `OPENAI_API_KEY` or `OPENAI_API_KEY_ESN` (the wrapper prefers
+`OPENAI_API_KEY_ESN` when both are present); no other environment variables are
+needed.
+
 ```bash
-export PYTHONPATH=src:examples:runs/h2h_bf:runs/novelty_exp
-export OPENAI_API_KEY=$OPENAI_API_KEY_ESN
-export DOMAIN=nz NEUTRALIZE_GATE=1 GEN_MODEL=gpt-4o-mini OPENEVOLVE_PROMPT=1 \
-       NZ_TIMEOUT=90 NZ_SEED=$PWD/runs/h2h_bf/scipy_seed.py
-# arm = "off" (sampling/iter) or "8" (novelty, spectral_dim=8); args: arm seed gens batch
-python runs/novelty_exp/run_specdim.py off 42 1 160   # best-of-160 sampling
-python runs/novelty_exp/run_specdim.py 8   42 40 4    # 40-gen heavy evolution + novelty
+python examples/circle_packing/experiments/run.py --method sampling --n 80
+python examples/circle_packing/experiments/run.py --method evolution --gens 40 --novelty
 ```
+
+Each command prints one result line with `method`, `best_score`, and `n_evals`,
+followed by the reference line `(sampling ceiling ~2.61, AlphaEvolve SOTA 2.635)`.
+
+Internals note: the old research harness in `runs/novelty_exp/` is still kept for
+auditability. The wrapper above replaces the old manual setup:
+`PYTHONPATH=src:examples:runs/h2h_bf:runs/novelty_exp`, `DOMAIN=nz`,
+`NEUTRALIZE_GATE=1`, `GEN_MODEL=gpt-4o-mini`, `OPENEVOLVE_PROMPT=1`,
+`NZ_TIMEOUT=90`, `NZ_SEED=runs/h2h_bf/scipy_seed.py`, then
+`python runs/novelty_exp/run_specdim.py off 42 1 160` or
+`python runs/novelty_exp/run_specdim.py 8 42 40 4`.
+
 Result data: `runs/novelty_exp/results_oe_seeded*.jsonl`, `results_heavy.jsonl`.
 Full methodology + the confound log: `runs/novelty_exp/METHODOLOGY_AND_FINDINGS.md`.

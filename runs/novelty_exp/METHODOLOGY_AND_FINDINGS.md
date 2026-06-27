@@ -39,11 +39,17 @@ circles and/or measure progress ABOVE the 2.5 grid ceiling (see OPEN).
 
 ## METHODOLOGY — preconditions for a VALID comparison (each was violated at least once)
 
-1. **Identical prompt across ALL arms.** Every arm must generate via ESN's own LLMMutator
-   (same system prompt incl. the "avoid multi-phase optimization, prefer greedy single-pass"
-   runtime constraint, same seed). NEVER hand-write a baseline prompt. A hand-written
-   "bare objective" baseline let the model use `scipy.optimize` (57/80 candidates), which ESN's
-   prompt forbids -> baseline wins on a forbidden strategy. (3rd recurrence of this confound.)
+1. **Identical prompt across ALL arms** — but the prompt must not FORBID the winning
+   strategy. Every arm must generate via ESN's own LLMMutator with the *same* system
+   prompt and seed; never hand-write a baseline. **CORRECTION (this is the session's
+   central finding):** the right fix was NOT "always use ESN's stock prompt as the
+   reference." ESN's stock mutator prompt itself contained the confound — its
+   "avoid multi-phase optimization, prefer greedy single-pass" clause **forbids the
+   `scipy.optimize` constrained-optimization strategy that reaches SOTA**, capping every
+   arm at the ~2.17 uniform grid. The early "hand-written baseline cheats with scipy"
+   reading was backwards: the baseline was reaching for the *correct* tool that ESN's
+   prompt suppressed. The real fix: give all arms the *same* prompt with the forbidding
+   language *removed* (OpenEvolve-spirit, `oe_prompt.py`). See writeup C3.
 
 2. **Clean engine — neutralize the PARENT_QUALITY_FLOOR_RATIO gate.** A non-upstream gate
    (require parent score >= 0.85*best) was added during earlier exploration. It CRIPPLES ESN,
@@ -92,7 +98,19 @@ circles and/or measure progress ABOVE the 2.5 grid ceiling (see OPEN).
   on both seeds (2.498 vs 2.406, n=2, weak); ESN ~= ShinkaEvolve (competitive, no winner).
   Retracted an earlier overclaim table ("fully settled, Shinka loses") — was cherry-picked n=1-2.
 
-## FINAL VERDICT on the de-degenerated task (DOMAIN=nz, r>0, results_nz.jsonl)
+## ⚠️ SUPERSEDED VERDICT (historical — read the correction first)
+
+> **This section's conclusion ("4o-mini too weak, ESN doesn't help, stop spending")
+> is OVERTURNED.** It was written while ESN's mutator prompt *still forbade* the SOTA
+> strategy ("avoid multi-phase optimization") — which is *why* everything capped at
+> the 2.167 uniform grid. Once that prompt confound was removed (OpenEvolve-spirit
+> prompt, `oe_prompt.py`), 4o-mini writes `scipy.optimize` packings ~2.6, and **heavy
+> (40-gen) evolution + spectral reaches ≈SOTA 2.632, beating sampling.** So 4o-mini was
+> never "too weak" — it was muzzled. See the corrected study:
+> [`examples/circle_packing/experiments/README.md`](../../examples/circle_packing/experiments/README.md).
+> Kept below for the audit trail of how the confound produced a false negative.
+
+### (historical) "Final verdict" on the de-degenerated task, *anti-opt prompt still active*
 
 Ran single-shot vs ESN-iter vs ESN-iter+novelty on the nz domain (no 2.5 freebie),
 4o-mini, ~6 seeds each. **NOTHING exceeded 2.167 (the uniform-grid line) — 0 of ~17
