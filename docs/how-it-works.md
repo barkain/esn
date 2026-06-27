@@ -191,9 +191,22 @@ either direction — not about belief polarity.
 Center the matrix, then take its SVD, `K̃ = U·diag(σ)·Vᵀ`. The eigenvalues of the
 sample covariance are `λⱼ = σⱼ² / H` (where `H` is the hypothesis count); `V`'s
 columns are the candidate structural directions. Estimate the noise level as
-`σ² = trace/d` and the aspect ratio `γ = d/H`. Marchenko–Pastur then predicts the
-noise band edge `λ₊ = σ²(1 + √γ)²`, refined by a finite-sample Tracy–Widom
-correction. Eigenvalues above the active threshold are spikes.
+`σ² = trace/d` and the **aspect ratio** `γ_aspect = d/H` (`gamma_t` in the code),
+where `d` is the PCA-compressed embedding width — the `spectral_dim` config
+(default **8**). Marchenko–Pastur then predicts the noise band edge
+`λ₊ = σ²(1 + √γ_aspect)²`, refined by a finite-sample Tracy–Widom correction.
+Eigenvalues above the active threshold are spikes.
+
+`γ_aspect` doubles as an **undersampling gate**: when `d ≳ H` (more embedding
+dimensions than hypotheses) the covariance is too rank-deficient to trust,
+`γ_aspect → 1`, the noise band swallows everything, and no eigenvalue can register
+as a spike — so `N_sp` stays at zero until the memory holds enough hypotheses.
+This is why `spectral_dim` must be kept *small* relative to the bank: an
+over-large value (the old default of 48) pins `γ_aspect ≈ 1` and keeps the gate
+permanently shut, leaving spectral novelty dormant for an entire run. See the
+budget-dependent study in
+[`examples/circle_packing/experiments/`](../examples/circle_packing/experiments)
+for where exactly this bit in practice.
 
 ### Three threshold modes
 
@@ -264,10 +277,11 @@ distinct degraded paths worth knowing:
   the spectral signal disappears. Search runs on **fitness + epistemic novelty**.
   This is a separate warning.
 
-![Spectral spikes accumulate over the run; the spectral mixing weight γ stays at zero until spikes persist for ≥3 consecutive generations, then rises.](assets/spectral-gate-circle-packing.png)
+![Spectral spikes accumulate over the run; the spectral mixing weight γ_w stays at zero until spikes persist for ≥3 consecutive generations, then rises.](assets/spectral-gate-circle-packing.png)
 
 *One real `circle_packing` run with the `[novelty]` embedder (seed 42). The
-spectral mixing weight γ holds at zero through the early generations even as
+spectral mixing weight γ_w (the blend weight of §6, distinct from the `γ_aspect`
+undersampling ratio above) holds at zero through the early generations even as
 spikes appear and disappear — it only lifts off once spikes have **persisted**
 long enough to clear the signal-quality gate. Spectral steering is conservative
 by construction. Reproduce: [`docs/assets/`](../docs/assets).*
@@ -377,10 +391,12 @@ outside the predictor's pre-evaluation estimate. Broken candidates have their
 `N_ep` heavily discounted. `N_ep` is min-max normalized to `[0,1]`.
 
 **The unified blend.** Selection-facing novelty is
-`N = γ·N_sp + (1−γ)·N_ep`, with `γ = sigmoid(−erank/τ)` — *lower effective rank*
-(more concentrated structure) leans toward spectral, more diffuse memory leans
-toward epistemic. As noted in §4, `γ` is hard-gated to zero until spikes persist,
-so early on `N` is purely epistemic. ([`scorer.py`](../src/esn/core/scorer.py).)
+`N = γ_w·N_sp + (1−γ_w)·N_ep`, with the **mixing weight**
+`γ_w = sigmoid(−erank/τ)` (`gamma_w` in the code — distinct from the `γ_aspect`
+undersampling ratio of §4) — *lower effective rank* (more concentrated structure)
+leans toward spectral, more diffuse memory leans toward epistemic. As noted in §4,
+`γ_w` is hard-gated to zero until spikes persist, so early on `N` is purely
+epistemic. ([`scorer.py`](../src/esn/core/scorer.py).)
 
 **Operator credit (which mutation *style* to try).** The bandit arms are the four
 core styles — refine, explore, repair, radical. A UCB rule with an ε-greedy floor
