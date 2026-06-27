@@ -6,7 +6,7 @@ Reads ``data/run_on.json`` (and optionally ``data/run_off.json``) — captured b
 ``capture_run.py`` from real ``circle_packing`` runs — and writes three PNGs next
 to this script. Pure matplotlib, fully reproducible from the committed data:
 
-    uv run --extra novelty python docs/assets/make_value_figures.py
+    uv run --with matplotlib --extra novelty python docs/assets/make_value_figures.py
 """
 
 import json

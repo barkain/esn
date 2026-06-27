@@ -7,13 +7,38 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import os
+import signal
 import subprocess
+import types
 from pathlib import Path
 from typing import Any
 
 from esn.core.models import CompilerResult  # type: ignore[import-untyped]
 from esn.engine.compiler import _strip_name_main_blocks, validate_program_ast  # type: ignore[import-untyped]
 from esn.engine.subprocess_limiter import subprocess_slot
+
+
+def _kill_process_group(proc: subprocess.Popen) -> None:
+    """SIGKILL the subprocess's entire process group, then reap it.
+
+    The candidate runs as ``uv run -> python candidate_runner.py``; the process
+    was started with ``start_new_session=True`` so both share a process group.
+    Killing the group (not just ``proc``) terminates the grandchild candidate
+    that would otherwise be orphaned and loop forever.
+    """
+    try:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+    except (ProcessLookupError, PermissionError):
+        try:
+            proc.kill()
+        except ProcessLookupError:
+            pass
+    try:
+        proc.communicate(timeout=5)
+    except (subprocess.TimeoutExpired, ValueError):
+        pass
+
 
 # Map import names to pip package names (only non-obvious mappings needed)
 _IMPORT_TO_PACKAGE: dict[str, str] = {
@@ -198,23 +223,32 @@ class UvSandboxCompiler:
         # Step 3: Build command
         cmd = self._build_command(deps, effective_seed)
 
-        # Step 4: Run subprocess (semaphore limits concurrency to cpu_count)
-        try:
-            with subprocess_slot():
-                result = subprocess.run(  # noqa: S603 — controlled command
-                    cmd,
-                    input=code,
-                    capture_output=True,
-                    text=True,
-                    timeout=self._timeout,
-                )
-        except subprocess.TimeoutExpired:
-            return CompilerResult(
-                artifact=None,
-                success=False,
-                errors=[f"Timeout: execution exceeded {self._timeout}s"],
-                metadata={"stage": "timeout"},
+        # Step 4: Run subprocess in its OWN process group (start_new_session) so a
+        # timeout can kill the ENTIRE tree. `uv run` spawns a `python
+        # candidate_runner.py` grandchild; plain subprocess.run(timeout=) only
+        # SIGKILLs the direct child (uv run), orphaning the grandchild, which
+        # keeps running a runaway loop forever (accumulates CPU -> machine
+        # overload). Killing the process group reaps both.
+        with subprocess_slot():
+            proc = subprocess.Popen(  # noqa: S603 — controlled command
+                cmd,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                start_new_session=True,
             )
+            try:
+                out, err = proc.communicate(input=code, timeout=self._timeout)
+                result = types.SimpleNamespace(returncode=proc.returncode, stdout=out, stderr=err)
+            except subprocess.TimeoutExpired:
+                _kill_process_group(proc)
+                return CompilerResult(
+                    artifact=None,
+                    success=False,
+                    errors=[f"Timeout: execution exceeded {self._timeout}s"],
+                    metadata={"stage": "timeout"},
+                )
 
         # Step 5: Check exit code
         if result.returncode != 0:

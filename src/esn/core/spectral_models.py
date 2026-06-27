@@ -174,8 +174,15 @@ class ESNConfig(BaseModel):
     admission_tag_overlap: float = 0.3  # normalized tag Jaccard threshold for duplicate check
     # Hypothesis TTL — auto-retire untested hypotheses after N generations
     hypothesis_ttl: int = 5  # retire if n_obs==1 after this many gens since creation (0=disabled)
-    # Spectral compression
-    spectral_dim: int = 48  # Working dimension for spectral pipeline (PCA compression)
+    # Spectral compression — PCA target dimension for the spectral pipeline.
+    # The compressor uses actual_dim = min(spectral_dim, n_obs); the BBP/MP spike
+    # detector treats gamma = d / n_obs >= 0.9 as "undersampled" and suppresses
+    # itself. When spectral_dim exceeds the live knowledge bank (typically tens of
+    # hypotheses), d tracks n_obs so gamma stays ~1.0 the whole run -> the detector
+    # NEVER engages (0 spikes, N_sp == 0). Keeping it small and fixed makes
+    # gamma = spectral_dim / n_obs fall below the gate once the bank grows past
+    # ~3x spectral_dim, so the detector can actually fire.
+    spectral_dim: int = 8
     # Spectral threshold mode
     spectral_threshold_mode: str = "empirical"  # "empirical" | "mp" | "hybrid"
     # Time budget

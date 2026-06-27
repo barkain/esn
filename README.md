@@ -44,16 +44,19 @@ rule — "among viable candidates, prefer the most novel"; for exactly how the
 implementation realizes that and where the two diverge, see
 [docs/how-it-works.md](docs/how-it-works.md).)
 
-![ESN keeps viable-but-below-best candidates on a novelty-ranked frontier; on this run the best is the child of a below-best frontier survivor.](docs/assets/frontier-survival-circle-packing.png)
+![ESN evolution climbing in discrete steps from a scipy seed past the best-of-N sampling plateau up to the AlphaEvolve state-of-the-art on 26-circle packing.](docs/assets/evolution-climbs-to-sota.png)
 
-*How routing works, on one real `circle_packing` run (Claude Haiku, seed 42):
-fitness crowns the champion, while the novelty frontier keeps viable-but-below-best
-candidates alive — here the run's best (2.06) happened to descend from a
-**below-best** candidate (1.75) the frontier preserved. This is a single-run
-illustration of the **mechanism**, not a performance claim: in controlled
-multi-seed tests, novelty-guided vs novelty-off search were statistically
-indistinguishable on this benchmark. Reproducible scripts/data:
-[`docs/assets/`](docs/assets).*
+*Two real `circle_packing` runs (gpt-4o-mini, identical fixed prompt, seeds 42 &
+43): ESN's evolutionary + spectral-novelty search climbs in discrete steps from
+the scipy seed (~2.595) past where best-of-N **sampling plateaus** (~2.614) up to
+**≈ the AlphaEvolve state-of-the-art (2.635)** — closing the headroom that plain
+sampling can't. This advantage is **budget-dependent**: at a *light* (~20-gen)
+budget novelty-guided vs novelty-off search are statistically indistinguishable
+on this benchmark; the gap above only opens at a *heavier* (~40-gen) budget (here
+n=2, a capability demonstration). Full multi-seed study, confounds, and the
+routing **mechanism** behind it:
+[`examples/circle_packing/experiments/`](examples/circle_packing/experiments).
+Reproducible scripts/data: [`docs/assets/`](docs/assets).*
 
 ---
 
@@ -182,8 +185,8 @@ See **[docs/mutators.md](docs/mutators.md)** for the comparison and one-liners.
 
 ## Bundled examples
 
-Three complete `DomainSpec` implementations ship in [`examples/`](examples/) as
-working references:
+Four complete `DomainSpec` implementations (plus a copy-paste `skeleton/`
+template) ship in [`examples/`](examples/) as working references:
 
 - [`examples/circle_packing/`](examples/circle_packing) — pack *n* circles into a
   unit square to maximize the sum of radii. A continuous-geometry domain;
@@ -196,6 +199,9 @@ working references:
   candidate is a pure payload-strategy generator; the evaluator owns all target
   I/O and scores a **non-gameable** continuous distance-to-exploit ladder up to
   full blind extraction. Offline and CI-safe — no external target.
+- [`examples/web_ctf_chain/`](examples/web_ctf_chain) — a multi-stage web-CTF
+  exploitation chain (its own README), for **authorized security testing**: the
+  candidate plans a staged attack scored against a redacted, non-gameable oracle.
 
 Each example is a self-contained template: copy the directory, swap in your
 problem's `description`, `initial_code`, `evaluator`, and constraints, and you
