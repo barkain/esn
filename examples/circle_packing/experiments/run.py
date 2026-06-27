@@ -69,7 +69,9 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--method", choices=("sampling", "evolution"), required=True)
     parser.add_argument("--gens", type=int, default=40, help="Evolution generations.")
     parser.add_argument("--n", type=int, default=80, help="Sampling batch size.")
-    parser.add_argument("--novelty", action="store_true", help="Enable ESN novelty with spectral_dim=8.")
+    parser.add_argument(
+        "--novelty", action="store_true", help="Enable ESN novelty with spectral_dim=8."
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--model", default="gpt-4o-mini")
     args = parser.parse_args(argv)
@@ -101,7 +103,9 @@ def _install_spectral_dim_patch(spectral_dim: int) -> None:
     """Force the novelty stack to the working spectral dimension used here."""
     import esn.api as api
 
-    def patched_stack(seed: int, spectral_threshold_mode: str = "empirical") -> tuple[Any, Any, Any]:
+    def patched_stack(
+        seed: int, spectral_threshold_mode: str = "empirical"
+    ) -> tuple[Any, Any, Any]:
         from esn.core.knowledge import KnowledgeIntegration
         from esn.core.novelty import NoveltyComputer
         from esn.core.spectral_models import ESNConfig
@@ -123,7 +127,10 @@ def _install_spectral_dim_patch(spectral_dim: int) -> None:
                     message=r".*get_sentence_embedding_dimension.*",
                     category=FutureWarning,
                 )
-                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+                with (
+                    contextlib.redirect_stdout(io.StringIO()),
+                    contextlib.redirect_stderr(io.StringIO()),
+                ):
                     embedder = SentenceTransformerEmbedder(config.embedding_model)
         except Exception as exc:
             warnings.warn(

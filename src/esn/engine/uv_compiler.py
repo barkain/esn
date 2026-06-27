@@ -39,6 +39,7 @@ def _kill_process_group(proc: subprocess.Popen) -> None:
     except (subprocess.TimeoutExpired, ValueError):
         pass
 
+
 # Map import names to pip package names (only non-obvious mappings needed)
 _IMPORT_TO_PACKAGE: dict[str, str] = {
     "numpy": "numpy",
