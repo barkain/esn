@@ -100,13 +100,14 @@ engagement → higher scores.
 
 Use the wrapper. It sets up the `nz` domain, OpenEvolve-style prompt, scipy seed,
 90 s sandbox timeout, clean parent gate, and the spectral-dim fix internally.
-Set either `OPENAI_API_KEY` or `OPENAI_API_KEY_ESN` (the wrapper prefers
-`OPENAI_API_KEY_ESN` when both are present); no other environment variables are
-needed.
+Set `OPENAI_API_KEY`; no other environment variables are needed.
 
 ```bash
-python examples/circle_packing/experiments/run.py --method sampling --n 80
-python examples/circle_packing/experiments/run.py --method evolution --gens 40 --novelty
+# best-of-N sampling (needs only the OpenAI client)
+uv run --extra llm python examples/circle_packing/experiments/run.py --method sampling --n 80
+
+# ESN evolution + spectral novelty (also needs the learned-embedding extra)
+uv run --extra llm --extra novelty python examples/circle_packing/experiments/run.py --method evolution --gens 40 --novelty
 ```
 
 Each command prints one result line with `method`, `best_score`, and `n_evals`,
@@ -117,8 +118,8 @@ auditability. The wrapper above replaces the old manual setup:
 `PYTHONPATH=src:examples:runs/h2h_bf:runs/novelty_exp`, `DOMAIN=nz`,
 `NEUTRALIZE_GATE=1`, `GEN_MODEL=gpt-4o-mini`, `OPENEVOLVE_PROMPT=1`,
 `NZ_TIMEOUT=90`, `NZ_SEED=runs/h2h_bf/scipy_seed.py`, then
-`python runs/novelty_exp/run_specdim.py off 42 1 160` or
-`python runs/novelty_exp/run_specdim.py 8 42 40 4`.
+`uv run python runs/novelty_exp/run_specdim.py off 42 1 160` or
+`uv run python runs/novelty_exp/run_specdim.py 8 42 40 4`.
 
 Result data: `runs/novelty_exp/results_oe_seeded*.jsonl`, `results_heavy.jsonl`.
 Full methodology + the confound log: `runs/novelty_exp/METHODOLOGY_AND_FINDINGS.md`.
